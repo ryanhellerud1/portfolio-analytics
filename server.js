@@ -18,9 +18,13 @@ const app = express()
 app.use(express.json())
 app.use(cors())
 
-// Add request logging
+// Add request logging with more details
 app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`)
+  const start = Date.now()
+  res.on('finish', () => {
+    const duration = Date.now() - start
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} - ${res.statusCode} (${duration}ms)`)
+  })
   next()
 })
 
@@ -99,25 +103,165 @@ coingeckoApi.interceptors.request.use(request => {
   return request
 })
 
-// Mount analytics routes
-app.use('/api/analytics', analyticsRoutes)
+// Mount analytics routes first (before other routes)
+app.use('/api/analytics', (req, res, next) => {
+  console.log('[Analytics Route]', req.method, req.url)
+  next()
+}, analyticsRoutes)
 
-// ... rest of your existing endpoints (prices, markets, search) ...
+// Price endpoint
+app.get('/api/prices', async (req, res) => {
+  try {
+    const { ids } = req.query
+    if (!ids) {
+      return res.status(400).json({ error: 'Missing coin IDs' })
+    }
 
-// Error handling middleware
+    const idArray = ids.split(',')
+    try {
+      const response = await coingeckoApi.get('/coins/markets', {
+        params: {
+          vs_currency: 'usd',
+          ids: idArray.join(','),
+          order: 'market_cap_desc',
+          per_page: 250,
+          sparkline: false,
+          price_change_percentage: '24h'
+        }
+      })
+
+      const formattedData = {}
+      response.data.forEach(coin => {
+        formattedData[coin.id] = {
+          usd: coin.current_price,
+          usd_24h_change: coin.price_change_percentage_24h,
+          usd_24h_vol: coin.total_volume,
+          usd_market_cap: coin.market_cap
+        }
+      })
+
+      return res.json(formattedData)
+    } catch (coingeckoError) {
+      console.error('CoinGecko API error:', coingeckoError)
+      return res.json(idArray.reduce((acc, id) => {
+        acc[id] = {
+          usd: 0,
+          usd_24h_change: 0,
+          usd_24h_vol: 0,
+          usd_market_cap: 0
+        }
+        return acc
+      }, {}))
+    }
+  } catch (error) {
+    console.error('Price fetch error:', error)
+    res.status(500).json({ 
+      error: 'Failed to fetch prices',
+      details: error.message
+    })
+  }
+})
+
+// Markets endpoint
+app.get('/api/markets', async (req, res) => {
+  try {
+    const response = await coingeckoApi.get('/coins/markets', {
+      params: {
+        vs_currency: 'usd',
+        order: 'market_cap_desc',
+        per_page: 10,
+        sparkline: false
+      }
+    })
+    res.json(response.data)
+  } catch (error) {
+    console.error('Markets error:', error)
+    res.status(500).json({ 
+      error: 'Failed to fetch markets',
+      details: error.message
+    })
+  }
+})
+
+// Search endpoint
+app.get('/api/search', async (req, res) => {
+  try {
+    const { query } = req.query
+    if (!query) {
+      return res.status(400).json({ error: 'Missing search query' })
+    }
+
+    const searchResponse = await coingeckoApi.get('/search', {
+      params: { query }
+    })
+
+    if (searchResponse.data.coins.length > 0) {
+      const coinIds = searchResponse.data.coins.map(coin => coin.id).slice(0, 10)
+      const detailsResponse = await coingeckoApi.get('/coins/markets', {
+        params: {
+          vs_currency: 'usd',
+          ids: coinIds.join(','),
+          order: 'market_cap_desc',
+          per_page: 10,
+          sparkline: false,
+          price_change_percentage: '24h'
+        }
+      })
+
+      const enrichedResults = searchResponse.data.coins.map(coin => {
+        const details = detailsResponse.data.find(d => d.id === coin.id) || {}
+        return {
+          ...coin,
+          current_price: details.current_price,
+          market_cap: details.market_cap,
+          price_change_24h: details.price_change_percentage_24h
+        }
+      })
+
+      res.json({
+        coins: enrichedResults.slice(0, 10)
+      })
+    } else {
+      res.json({ coins: [] })
+    }
+  } catch (error) {
+    console.error('Search error:', error)
+    res.status(500).json({ 
+      error: 'Failed to search',
+      details: error.message
+    })
+  }
+})
+
+// Error handling middleware with more details
 app.use((err, req, res, next) => {
-  console.error('Error:', err.message)
+  console.error('Error details:', {
+    message: err.message,
+    stack: err.stack,
+    path: req.path,
+    method: req.method,
+    timestamp: new Date().toISOString()
+  })
+  
   res.status(err.status || 500).json({
     error: process.env.NODE_ENV === 'production' ? 'Internal Server Error' : err.message,
-    status: err.status || 500
+    status: err.status || 500,
+    path: req.path
   })
 })
 
-// 404 handler
+// 404 handler with more context
 app.use((req, res) => {
+  console.log('404 Not Found:', {
+    path: req.path,
+    method: req.method,
+    timestamp: new Date().toISOString()
+  })
+  
   res.status(404).json({
     error: 'Not Found',
-    message: `Cannot ${req.method} ${req.url}`
+    message: `Cannot ${req.method} ${req.url}`,
+    path: req.path
   })
 })
 

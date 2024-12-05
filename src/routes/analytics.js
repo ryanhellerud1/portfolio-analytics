@@ -3,6 +3,12 @@ import { get_snowflake_connection, validateSnowflakeConfig } from '../utils/snow
 
 const router = express.Router()
 
+// Debug logging middleware for analytics routes
+router.use((req, res, next) => {
+  console.log(`[Analytics] ${req.method} ${req.path}`)
+  next()
+})
+
 // Mock data for when Snowflake is not available
 const mockData = {
   technical: [
@@ -88,30 +94,46 @@ const mockData = {
 
 // Helper function to handle Snowflake or return mock data
 const getDataWithFallback = async (endpoint, sqlQuery, formatFunction) => {
+  console.log(`[Analytics] Fetching data for ${endpoint}`)
+  
   // Check if Snowflake is configured
   if (!validateSnowflakeConfig()) {
-    console.log(`Snowflake not configured, returning mock data for ${endpoint}`)
+    console.log(`[Analytics] Snowflake not configured, returning mock data for ${endpoint}`)
     return mockData[endpoint]
   }
 
   let connection
   try {
+    console.log(`[Analytics] Attempting Snowflake connection for ${endpoint}`)
     connection = await get_snowflake_connection()
     const data = await new Promise((resolve, reject) => {
       connection.execute({
         sqlText: sqlQuery,
         complete: (err, stmt, rows) => {
-          if (err) reject(err)
-          else resolve(formatFunction ? formatFunction(rows) : rows)
+          if (err) {
+            console.error(`[Analytics] Snowflake query error for ${endpoint}:`, err)
+            reject(err)
+          } else {
+            console.log(`[Analytics] Snowflake query success for ${endpoint}`)
+            resolve(formatFunction ? formatFunction(rows) : rows)
+          }
         }
       })
     })
     return data
   } catch (error) {
-    console.error(`Error fetching ${endpoint} data:`, error)
+    console.error(`[Analytics] Error fetching ${endpoint} data:`, error)
+    console.log(`[Analytics] Falling back to mock data for ${endpoint}`)
     return mockData[endpoint]
   } finally {
-    if (connection) await connection.destroy()
+    if (connection) {
+      try {
+        await connection.destroy()
+        console.log(`[Analytics] Snowflake connection closed for ${endpoint}`)
+      } catch (err) {
+        console.error(`[Analytics] Error closing Snowflake connection for ${endpoint}:`, err)
+      }
+    }
   }
 }
 
