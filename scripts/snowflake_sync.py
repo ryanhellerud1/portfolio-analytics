@@ -1,31 +1,9 @@
-import sys
+import snowflake.connector
 import os
-import subprocess
+import sys
 import json
 from datetime import datetime
-
-def ensure_module(module_name, package_name=None):
-    try:
-        __import__(module_name)
-        print(f"{module_name} imported successfully")
-    except ImportError:
-        package = package_name or module_name
-        print(f"Installing {package}...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", package])
-        __import__(module_name)
-        print(f"{package} installed and imported successfully")
-
-print("Python executable:", sys.executable)
-print("Python path:", sys.path)
-print("Current working directory:", os.getcwd())
-
-# Install required packages
-ensure_module('dotenv', 'python-dotenv')
-ensure_module('snowflake.connector', 'snowflake-connector-python')
-
-# Now import after ensuring packages are installed
 from dotenv import load_dotenv
-import snowflake.connector
 
 def get_snowflake_connection():
     load_dotenv()
@@ -40,134 +18,105 @@ def get_snowflake_connection():
         account=account_identifier,
         warehouse=os.getenv('SNOWFLAKE_WAREHOUSE'),
         database=os.getenv('SNOWFLAKE_DATABASE'),
-        schema=os.getenv('SNOWFLAKE_SCHEMA'),
-        insecure_mode=True,
-        client_session_keep_alive=True
+        schema=os.getenv('SNOWFLAKE_SCHEMA')
     )
 
-def sync_holdings(holdings):
+def sync_data(data):
+    conn = get_snowflake_connection()
+    cur = conn.cursor()
+    
     try:
-        conn = get_snowflake_connection()
-        cur = conn.cursor()
+        # Extract holdings and prices from input data
+        holdings = data.get('holdings', [])
+        prices = data.get('prices', [])
         
-        # First, clear existing holdings
-        cur.execute("DELETE FROM HOLDINGS")
+        print(f"Processing {len(holdings)} holdings and {len(prices)} prices")
         
-        # Insert new holdings
-        insert_query = """
-        INSERT INTO HOLDINGS (COIN_ID, SYMBOL, NAME, AMOUNT, CATEGORY)
-        VALUES (%s, %s, %s, %s, %s)
-        """
-        
+        # Validate holdings data
+        required_holding_fields = ['coin_id', 'symbol', 'name', 'amount']
         for holding in holdings:
-            cur.execute(insert_query, (
-                holding['coinId'],
+            missing_fields = [field for field in required_holding_fields if field not in holding]
+            if missing_fields:
+                raise ValueError(f"Missing required fields in holding: {missing_fields}")
+        
+        # Validate price data
+        required_price_fields = ['coin_id', 'price_usd']
+        for price in prices:
+            missing_fields = [field for field in required_price_fields if field not in price]
+            if missing_fields:
+                raise ValueError(f"Missing required fields in price: {missing_fields}")
+        
+        # Update holdings
+        for holding in holdings:
+            cur.execute("""
+            MERGE INTO HOLDINGS t
+            USING (SELECT %s as COIN_ID, %s as SYMBOL, %s as NAME, %s as AMOUNT, %s as CATEGORY) s
+            ON t.COIN_ID = s.COIN_ID
+            WHEN MATCHED THEN
+                UPDATE SET 
+                    AMOUNT = s.AMOUNT,
+                    CATEGORY = s.CATEGORY,
+                    UPDATED_AT = CURRENT_TIMESTAMP()
+            WHEN NOT MATCHED THEN
+                INSERT (COIN_ID, SYMBOL, NAME, AMOUNT, CATEGORY)
+                VALUES (s.COIN_ID, s.SYMBOL, s.NAME, s.AMOUNT, s.CATEGORY)
+            """, (
+                holding['coin_id'],
                 holding['symbol'],
                 holding['name'],
                 holding['amount'],
-                holding.get('category', 'Other')  # Default to 'Other' if category not set
+                holding.get('category', 'Other')
             ))
         
-        conn.commit()
-        print(f"Successfully synced {len(holdings)} holdings")
-        
-        # Verify the sync
-        cur.execute("SELECT COUNT(*) FROM HOLDINGS")
-        count = cur.fetchone()[0]
-        print(f"Total holdings in database: {count}")
-        
-    except Exception as e:
-        print(f"Error syncing holdings: {str(e)}")
-        raise
-    finally:
-        if 'conn' in locals():
-            conn.close()
-
-def sync_prices(prices):
-    try:
-        conn = get_snowflake_connection()
-        cur = conn.cursor()
-        
-        timestamp = datetime.now()
-        
-        print("\nInserting price data:")
-        for coin_id, data in prices.items():
-            price_data = {
-                'coin_id': coin_id,
-                'price': data.get('usd', 0),
-                'change': data.get('usd_24h_change', 0),
-                'volume': data.get('usd_24h_vol', 0),
-                'market_cap': data.get('usd_market_cap', 0)
-            }
-            print(f"{coin_id}: ${price_data['price']:,.2f} ({price_data['change']:,.2f}%)")
-            
+        # Insert new prices
+        for price in prices:
             cur.execute("""
-                INSERT INTO PRICES (
-                    COIN_ID, 
-                    TIMESTAMP,
-                    PRICE_USD, 
-                    MARKET_CAP_USD, 
-                    VOLUME_24H_USD, 
-                    PRICE_CHANGE_24H_PCT
-                )
-                VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO PRICES (
+                COIN_ID,
+                PRICE_USD,
+                MARKET_CAP_USD,
+                VOLUME_24H_USD,
+                PRICE_CHANGE_24H_PCT
+            ) VALUES (%s, %s, %s, %s, %s)
             """, (
-                coin_id,
-                timestamp,
-                price_data['price'],
-                price_data['market_cap'],
-                price_data['volume'],
-                price_data['change']
+                price['coin_id'],
+                price['price_usd'],
+                price.get('market_cap_usd', 0),
+                price.get('volume_24h_usd', 0),
+                price.get('price_change_24h_pct', 0)
             ))
         
         conn.commit()
+        print("✅ Sync completed successfully!")
         
-        # Verify the inserted data
-        cur.execute("""
-            SELECT 
-                h.SYMBOL,
-                p.PRICE_USD,
-                p.PRICE_CHANGE_24H_PCT,
-                h.AMOUNT,
-                h.AMOUNT * p.PRICE_USD as POSITION_VALUE
-            FROM PRICES p
-            JOIN HOLDINGS h ON h.COIN_ID = p.COIN_ID
-            WHERE p.TIMESTAMP = %s
-            ORDER BY POSITION_VALUE DESC
-        """, (timestamp,))
+        # Return summary
+        return {
+            'holdings_updated': len(holdings),
+            'prices_inserted': len(prices),
+            'timestamp': datetime.now().isoformat()
+        }
         
-        print("\nVerifying inserted data:")
-        for row in cur.fetchall():
-            print(f"{row[0]}: ${row[1]:,.2f} ({row[2]:,.2f}%) - Position: ${row[4]:,.2f}")
-            
     except Exception as e:
-        print(f"Error syncing prices: {str(e)}")
+        conn.rollback()
+        print(f"❌ Error during sync: {str(e)}")
         raise
     finally:
-        if 'conn' in locals():
-            conn.close()
-
-def main():
-    try:
-        # Get holdings data from command line argument
-        if len(sys.argv) < 2:
-            print("No holdings data provided")
-            return
-        
-        data = json.loads(sys.argv[1])
-        
-        # Sync holdings
-        sync_holdings(data['holdings'])
-        
-        # If prices are provided, sync them too
-        if 'prices' in data:
-            sync_prices(data['prices'])
-            
-        print("Sync completed successfully")
-        
-    except Exception as e:
-        print(f"Error in sync script: {str(e)}")
-        sys.exit(1)
+        cur.close()
+        conn.close()
 
 if __name__ == "__main__":
-    main() 
+    try:
+        # Read input data from command line argument
+        if len(sys.argv) < 2:
+            raise ValueError("No input data provided")
+            
+        data = json.loads(sys.argv[1])
+        result = sync_data(data)
+        print(json.dumps(result))
+        
+    except Exception as e:
+        print(json.dumps({
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }))
+        sys.exit(1) 

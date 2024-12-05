@@ -1,6 +1,9 @@
-const API_BASE = process.env.NODE_ENV === 'production'
-  ? 'https://crypto-tracker-api-djbp.onrender.com'
-  : 'http://localhost:3001'
+const API_BASE = process.env.REACT_APP_API_URL || 
+  (process.env.NODE_ENV === 'production'
+    ? 'https://crypto-tracker-api-djbp.onrender.com'
+    : 'http://localhost:3001')
+
+console.log('API Service initialized with base URL:', API_BASE)
 
 const defaultHeaders = {
   'Accept': 'application/json',

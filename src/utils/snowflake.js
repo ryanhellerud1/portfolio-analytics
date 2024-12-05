@@ -13,7 +13,8 @@ export const get_snowflake_connection = () => {
         password: process.env.SNOWFLAKE_PASSWORD,
         warehouse: process.env.SNOWFLAKE_WAREHOUSE,
         database: process.env.SNOWFLAKE_DATABASE,
-        schema: process.env.SNOWFLAKE_SCHEMA
+        schema: process.env.SNOWFLAKE_SCHEMA,
+        role: process.env.SNOWFLAKE_ROLE
       })
 
       connection.connect((err, conn) => {
@@ -21,6 +22,7 @@ export const get_snowflake_connection = () => {
           console.error('Snowflake connection error:', err)
           reject(err)
         } else {
+          console.log('✅ Successfully connected to Snowflake')
           resolve(conn)
         }
       })

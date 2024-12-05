@@ -287,23 +287,19 @@ function PortfolioManager() {
         
         const payload = {
           holdings: holdings.map(h => ({
-            coinId: h.coinId,
+            coin_id: h.coinId,
             symbol: h.symbol,
             name: h.name,
             amount: h.amount,
             category: h.category || 'Other'
           })),
-          prices: Object.fromEntries(
-            holdings.map(h => [
-              h.coinId,
-              {
-                usd: prices[h.coinId]?.usd || 0,
-                usd_market_cap: prices[h.coinId]?.usd_market_cap || 0,
-                usd_24h_vol: prices[h.coinId]?.usd_24h_vol || 0,
-                usd_24h_change: prices[h.coinId]?.usd_24h_change ?? 0
-              }
-            ])
-          )
+          prices: holdings.map(h => ({
+            coin_id: h.coinId,
+            price_usd: prices[h.coinId]?.usd || 0,
+            market_cap_usd: prices[h.coinId]?.usd_market_cap || 0,
+            volume_24h_usd: prices[h.coinId]?.usd_24h_vol || 0,
+            price_change_24h_pct: prices[h.coinId]?.usd_24h_change ?? 0
+          }))
         }
 
         console.log('Sync payload:', {
