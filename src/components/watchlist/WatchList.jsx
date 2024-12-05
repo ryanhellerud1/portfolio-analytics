@@ -87,6 +87,15 @@ function WatchList() {
   return (
     <Box p={4}>
       <VStack spacing={6} align="stretch">
+        <Box mb={4}>
+          <Text fontSize="2xl" fontWeight="bold" mb={2}>
+            Crypto Watch List
+          </Text>
+          <Text color="gray.600" _dark={{ color: 'gray.300' }} mb={4}>
+            Track your favorite cryptocurrencies by adding them to your watch list. Search and add coins to monitor their prices and performance.
+          </Text>
+        </Box>
+
         <Box position="relative" ref={searchRef}>
           <HStack>
             <Input

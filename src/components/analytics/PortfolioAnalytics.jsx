@@ -187,6 +187,15 @@ function PortfolioAnalytics() {
 
       {/* Analytics Tabs */}
       <Box p={5} shadow="md" borderWidth="1px" w="full" bg={bgColor}>
+        <Box mb={6}>
+          <Text fontSize="2xl" fontWeight="bold" mb={2}>
+            Market Analysis Dashboard
+          </Text>
+          <Text color="gray.600" _dark={{ color: 'gray.300' }}>
+            Monitor your portfolio with advanced analytics including technical indicators, risk metrics, and price momentum signals. Add coins to your watch list to track their performance.
+          </Text>
+        </Box>
+
         <Tabs variant="enclosed">
           <TabList>
             <Tab>Technical Analysis</Tab>

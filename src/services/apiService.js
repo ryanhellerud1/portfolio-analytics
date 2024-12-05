@@ -7,12 +7,14 @@ console.log('API Service initialized with base URL:', API_BASE)
 
 const defaultHeaders = {
   'Accept': 'application/json',
-  'Content-Type': 'application/json'
+  'Content-Type': 'application/json',
+  'Origin': window.location.origin
 }
 
 const defaultOptions = {
   headers: defaultHeaders,
-  mode: 'cors'
+  mode: 'cors',
+  credentials: 'include'
 }
 
 const handleResponse = async (response) => {

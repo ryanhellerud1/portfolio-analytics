@@ -2,19 +2,21 @@ services:
   - type: web
     name: crypto-tracker-api
     env: node
-    buildCommand: npm install
-    startCommand: npm run server
+    buildCommand: |
+      npm install
+      npm run build
+    startCommand: node server.js
     envVars:
       - key: NODE_ENV
         value: production
-      - key: VITE_API_URL
-        value: https://crypto-tracker-api-djbp.onrender.com
+      - key: PORT
+        value: 3001
       - key: COINGECKO_API_URL
         value: https://api.coingecko.com/api/v3
       - key: COINGECKO_API_KEY
         value: CG-DEMO-KEY
-      - key: PORT
-        value: 3001
+      - key: CORS_ORIGIN
+        value: https://portfolio-metrics.netlify.app
       - key: SNOWFLAKE_ACCOUNT
         sync: false
       - key: SNOWFLAKE_USERNAME
@@ -26,4 +28,8 @@ services:
       - key: SNOWFLAKE_WAREHOUSE
         sync: false
       - key: SNOWFLAKE_ROLE
-        sync: false 
+        sync: false
+      - key: SNOWFLAKE_REGION
+        sync: false
+    healthCheckPath: /health
+    autoDeploy: true 
