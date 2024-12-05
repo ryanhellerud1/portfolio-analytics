@@ -17,8 +17,24 @@ const app = express()
 app.use(express.json())
 app.use(cors())
 
+// Add request logging
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`)
+  next()
+})
+
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Crypto Tracker API',
+    status: 'running',
+    endpoints: ['/health', '/debug', '/api/prices', '/api/markets', '/api/search']
+  })
+})
+
 // Health check endpoint (define this first)
 app.get('/health', (req, res) => {
+  console.log('Health check requested')
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
@@ -29,13 +45,17 @@ app.get('/health', (req, res) => {
 
 // Debug endpoint
 app.get('/debug', (req, res) => {
+  console.log('Debug info requested')
   res.json({
     status: 'ok',
     headers: req.headers,
     origin: req.get('origin'),
     method: req.method,
     path: req.path,
-    env: process.env.NODE_ENV || 'development'
+    env: process.env.NODE_ENV || 'development',
+    node_version: process.version,
+    memory_usage: process.memoryUsage(),
+    uptime: process.uptime()
   })
 })
 
@@ -511,25 +531,29 @@ setInterval(() => {
   }
 }, CACHE_DURATION)
 
-// Error handling middleware
+// Error handling middleware (define these last)
 app.use((err, req, res, next) => {
-  console.error('Error:', err.message);
+  console.error('Error:', err)
   res.status(err.status || 500).json({
     error: process.env.NODE_ENV === 'production' ? 'Internal Server Error' : err.message,
     status: err.status || 500
-  });
-});
+  })
+})
 
-// 404 handler
+// 404 handler (define this last)
 app.use((req, res) => {
+  console.log(`404 Not Found: ${req.method} ${req.url}`)
   res.status(404).json({
     error: 'Not Found',
     message: `Cannot ${req.method} ${req.url}`
-  });
-});
+  })
+})
 
 const PORT = process.env.PORT || 3001
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`)
   console.log('Environment:', process.env.NODE_ENV)
+  console.log('Node version:', process.version)
+  console.log('Current directory:', process.cwd())
+  console.log('__dirname:', __dirname)
 }) 
