@@ -9,12 +9,16 @@ const defaultHeaders = {
 
 const defaultOptions = {
   headers: defaultHeaders,
-  mode: 'cors',
-  credentials: 'include'
+  mode: 'cors'
 }
 
 const handleResponse = async (response) => {
   if (!response.ok) {
+    console.error('API Error:', {
+      status: response.status,
+      statusText: response.statusText,
+      url: response.url
+    })
     try {
       const errorData = await response.json()
       throw new Error(errorData.error || errorData.message || 'API Error')
@@ -22,12 +26,20 @@ const handleResponse = async (response) => {
       throw new Error(`HTTP error! status: ${response.status}`)
     }
   }
-  return response.json()
+  const data = await response.json()
+  console.log('API Response:', {
+    url: response.url,
+    data: data
+  })
+  return data
 }
 
 export const apiService = {
   // Price related endpoints
   getPrices: async (coinIds) => {
+    if (!coinIds || !Array.isArray(coinIds) || coinIds.length === 0) {
+      return {}
+    }
     try {
       const response = await fetch(`${API_BASE}/api/prices?ids=${coinIds.join(',')}`, defaultOptions)
       return handleResponse(response)
@@ -48,8 +60,9 @@ export const apiService = {
   },
 
   searchCryptos: async (query) => {
+    if (!query) return { coins: [] }
     try {
-      const response = await fetch(`${API_BASE}/api/search?query=${query}`, defaultOptions)
+      const response = await fetch(`${API_BASE}/api/search?query=${encodeURIComponent(query)}`, defaultOptions)
       return handleResponse(response)
     } catch (error) {
       console.error('Error searching cryptos:', error)

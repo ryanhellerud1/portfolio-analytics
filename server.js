@@ -38,27 +38,19 @@ const __dirname = path.dirname(__filename)
 const app = express()
 
 // CORS configuration
-const allowedOrigins = process.env.NODE_ENV === 'production'
-  ? ['https://portfolio-metrics.netlify.app']
-  : ['http://localhost:5173', 'http://localhost:3001']
-
-app.use(cors({
-  origin: function(origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true)
-    
-    if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = 'The CORS policy for this site does not allow access from the specified Origin.'
-      return callback(new Error(msg), false)
-    }
-    return callback(null, true)
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
-  exposedHeaders: ['Access-Control-Allow-Origin'],
-  maxAge: 86400 // 24 hours
-}))
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', 'https://portfolio-metrics.netlify.app');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Max-Age', '86400'); // 24 hours
+  
+  // Handle preflight
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+  } else {
+    next();
+  }
+});
 
 app.use(express.json())
 
@@ -67,13 +59,9 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV,
-    allowedOrigins
-  })
+    environment: process.env.NODE_ENV
+  });
 })
-
-// Add error handling for preflight requests
-app.options('*', cors())
 
 // Create axios instance for CoinGecko with API key
 const coingeckoApi = axios.create({
@@ -525,43 +513,23 @@ setInterval(() => {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error('Error:', err.message)
-  
-  // Handle CORS errors
-  if (err.message.includes('CORS')) {
-    return res.status(403).json({
-      error: 'CORS Error',
-      message: err.message,
-      allowedOrigins
-    })
-  }
-
-  // Handle Snowflake errors
-  if (err.message.includes('Snowflake')) {
-    return res.status(500).json({
-      error: 'Database Error',
-      message: 'Error connecting to the database'
-    })
-  }
-
-  // Default error response
-  res.status(500).json({
-    error: 'Internal Server Error',
-    message: process.env.NODE_ENV === 'production' ? 'An error occurred' : err.message
-  })
-})
+  console.error('Error:', err.message);
+  res.status(err.status || 500).json({
+    error: process.env.NODE_ENV === 'production' ? 'Internal Server Error' : err.message,
+    status: err.status || 500
+  });
+});
 
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({
     error: 'Not Found',
     message: `Cannot ${req.method} ${req.url}`
-  })
-})
+  });
+});
 
 const PORT = process.env.PORT || 3001
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
   console.log('Environment:', process.env.NODE_ENV)
-  console.log('Allowed Origins:', allowedOrigins)
 }) 
