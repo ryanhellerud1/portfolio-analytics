@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: crypto-tracker-api
+    env: node
+    buildCommand: npm install
+    startCommand: npm run server
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: COINGECKO_API_URL
+        value: https://api.coingecko.com/api/v3
+      - key: COINGECKO_API_KEY
+        value: CG-DEMO-KEY
+      - key: PORT
+        value: 3001
+      - key: SNOWFLAKE_ACCOUNT
+        sync: false
+      - key: SNOWFLAKE_USERNAME
+        sync: false
+      - key: SNOWFLAKE_PASSWORD
+        sync: false
+      - key: SNOWFLAKE_DATABASE
+        sync: false
+      - key: SNOWFLAKE_WAREHOUSE
+        sync: false
+      - key: SNOWFLAKE_ROLE
+        sync: false 

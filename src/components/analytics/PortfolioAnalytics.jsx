@@ -15,10 +15,18 @@ import {
   StatHelpText,
   StatArrow,
   useColorModeValue,
-  Spinner
+  Spinner,
+  Tabs,
+  TabList,
+  Tab,
+  TabPanels,
+  TabPanel
 } from '@chakra-ui/react'
 import { useEffect, useState } from 'react'
 import { useSync } from '../../context/SyncContext'
+import TechnicalIndicators from './TechnicalIndicators'
+import VolatilityAnalysis from './VolatilityAnalysis'
+import PriceMomentum from './PriceMomentum'
 
 function PortfolioAnalytics() {
   const [performance, setPerformance] = useState([])
@@ -144,6 +152,29 @@ function PortfolioAnalytics() {
         ) : (
           <Text color="gray.500" textAlign="center">No portfolio data available</Text>
         )}
+      </Box>
+
+      {/* Analytics Tabs */}
+      <Box p={5} shadow="md" borderWidth="1px" w="full" bg={bgColor}>
+        <Tabs variant="enclosed">
+          <TabList>
+            <Tab>Technical Analysis</Tab>
+            <Tab>Risk Analysis</Tab>
+            <Tab>Price Momentum</Tab>
+          </TabList>
+
+          <TabPanels>
+            <TabPanel>
+              <TechnicalIndicators />
+            </TabPanel>
+            <TabPanel>
+              <VolatilityAnalysis />
+            </TabPanel>
+            <TabPanel>
+              <PriceMomentum />
+            </TabPanel>
+          </TabPanels>
+        </Tabs>
       </Box>
 
       {/* Price Alerts */}

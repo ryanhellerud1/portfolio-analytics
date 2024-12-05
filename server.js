@@ -6,16 +6,29 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import dotenv from 'dotenv'
 import snowflake from 'snowflake-sdk'
+import 'dotenv/config'
 
 // Configure dotenv at the start
 dotenv.config()
 
-// Validate required environment variables
-const requiredEnvVars = ['COINGECKO_API_URL']  // Only require the API URL
+// Set default values for APIs
+const COINGECKO_API_URL = process.env.COINGECKO_API_URL || 'https://api.coingecko.com/api/v3'
+const COINGECKO_API_KEY = process.env.COINGECKO_API_KEY || 'CG-DEMO-KEY'
+
+// Validate only critical environment variables
+const requiredEnvVars = [
+  'SNOWFLAKE_ACCOUNT',
+  'SNOWFLAKE_USERNAME',
+  'SNOWFLAKE_PASSWORD',
+  'SNOWFLAKE_DATABASE',
+  'SNOWFLAKE_WAREHOUSE',
+  'SNOWFLAKE_ROLE'
+]
+
 const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName])
 if (missingEnvVars.length > 0) {
-  console.error('Missing required environment variables:', missingEnvVars)
-  process.exit(1)
+  console.warn('Missing some Snowflake environment variables:', missingEnvVars)
+  console.warn('Some features might not work without Snowflake configuration')
 }
 
 const { PythonShell } = pkg
@@ -23,16 +36,17 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const app = express()
-app.use(cors())
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production' 
+    ? ['https://your-netlify-app.netlify.app', 'https://crypto-tracker-api.onrender.com']
+    : 'http://localhost:5173',
+  credentials: true
+}))
 app.use(express.json())
-
-// Use demo key if no API key is provided
-const COINGECKO_API_KEY = process.env.COINGECKO_API_KEY || 'CG-DEMO-KEY'
-const COINGECKO_API = process.env.COINGECKO_API_URL
 
 // Create axios instance for CoinGecko with API key
 const coingeckoApi = axios.create({
-  baseURL: COINGECKO_API,
+  baseURL: COINGECKO_API_URL,
   timeout: 10000,
   headers: {
     'Accept': 'application/json',
@@ -386,6 +400,85 @@ app.get('/api/analytics/alerts', async (req, res) => {
         console.error('Error during connection cleanup:', err)
       }
     }
+  }
+})
+
+app.get('/api/analytics/technical', async (req, res) => {
+  let connection
+  try {
+    connection = await get_snowflake_connection()
+    const data = await new Promise((resolve, reject) => {
+      connection.execute({
+        sqlText: `
+          SELECT * FROM TECHNICAL_INDICATORS 
+          WHERE TIMESTAMP >= DATEADD(day, -7, CURRENT_TIMESTAMP())
+          ORDER BY TIMESTAMP DESC
+        `,
+        complete: (err, stmt, rows) => {
+          if (err) reject(err)
+          else resolve(rows)
+        }
+      })
+    })
+    res.json({ data })
+  } catch (error) {
+    console.error('Error fetching technical indicators:', error)
+    res.status(500).json({ error: 'Failed to fetch technical indicators' })
+  } finally {
+    if (connection) await connection.destroy()
+  }
+})
+
+app.get('/api/analytics/risk', async (req, res) => {
+  let connection
+  try {
+    connection = await get_snowflake_connection()
+    const data = await new Promise((resolve, reject) => {
+      connection.execute({
+        sqlText: `
+          SELECT * FROM PORTFOLIO_RISK_ANALYSIS
+          WHERE DATE >= DATEADD(day, -30, CURRENT_DATE())
+          ORDER BY DATE DESC
+        `,
+        complete: (err, stmt, rows) => {
+          if (err) reject(err)
+          else resolve(rows)
+        }
+      })
+    })
+    res.json({ data })
+  } catch (error) {
+    console.error('Error fetching risk analysis:', error)
+    res.status(500).json({ error: 'Failed to fetch risk analysis' })
+  } finally {
+    if (connection) await connection.destroy()
+  }
+})
+
+// Add momentum endpoint
+app.get('/api/analytics/momentum', async (req, res) => {
+  let connection
+  try {
+    connection = await get_snowflake_connection()
+    const data = await new Promise((resolve, reject) => {
+      connection.execute({
+        sqlText: `
+          SELECT * FROM PRICE_MOMENTUM
+          WHERE TIMESTAMP >= DATEADD(day, -30, CURRENT_TIMESTAMP())
+          ORDER BY TIMESTAMP DESC
+        `,
+        complete: (err, stmt, rows) => {
+          if (err) reject(err)
+          else resolve(rows)
+        }
+      })
+    })
+    res.json({ data })
+  } catch (error) {
+    console.error('Error fetching price momentum:', error)
+    res.status(500).json({ error: 'Failed to fetch price momentum' })
+  } finally {
+    if (connection) await connection.destroy()
   }
 })
 
