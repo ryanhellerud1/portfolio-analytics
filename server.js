@@ -11,6 +11,34 @@ import 'dotenv/config'
 // Configure dotenv at the start
 dotenv.config()
 
+const app = express()
+
+// Basic middleware
+app.use(express.json())
+app.use(cors())
+
+// Health check endpoint (define this first)
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    version: '1.0.0'
+  })
+})
+
+// Debug endpoint
+app.get('/debug', (req, res) => {
+  res.json({
+    status: 'ok',
+    headers: req.headers,
+    origin: req.get('origin'),
+    method: req.method,
+    path: req.path,
+    env: process.env.NODE_ENV || 'development'
+  })
+})
+
 // Set default values for APIs
 const COINGECKO_API_URL = process.env.COINGECKO_API_URL || 'https://api.coingecko.com/api/v3'
 const COINGECKO_API_KEY = process.env.COINGECKO_API_KEY || 'CG-DEMO-KEY'
@@ -34,34 +62,6 @@ if (missingEnvVars.length > 0) {
 const { PythonShell } = pkg
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
-
-const app = express()
-
-// CORS configuration
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', 'https://portfolio-metrics.netlify.app');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  res.header('Access-Control-Max-Age', '86400'); // 24 hours
-  
-  // Handle preflight
-  if (req.method === 'OPTIONS') {
-    res.sendStatus(200);
-  } else {
-    next();
-  }
-});
-
-app.use(express.json())
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV
-  });
-})
 
 // Create axios instance for CoinGecko with API key
 const coingeckoApi = axios.create({

@@ -8,6 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "start": "node server.js",
     "server": "node server.js",
     "verify-coins": "node scripts/verify-coins.js",
     "test-snowflake": "python scripts/test_snowflake.py",
