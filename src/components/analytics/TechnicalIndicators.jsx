@@ -25,7 +25,8 @@ import {
   StatNumber,
   StatHelpText,
   StatArrow,
-  Progress
+  Progress,
+  Grid
 } from '@chakra-ui/react'
 import { useEffect, useState, useMemo } from 'react'
 import { analyticsApi } from '../../services/analyticsApi'
@@ -45,9 +46,10 @@ export default function TechnicalIndicators() {
     try {
       setIsLoading(true)
       setError(null)
-      const technicalRes = await analyticsApi.getTechnicalIndicators()
-      if (!technicalRes.data) throw new Error('No technical data received')
-      setTechnicalData(technicalRes.data)
+      const response = await fetch('/api/analytics/technical')
+      const data = await response.json()
+      if (!data.data) throw new Error('No technical data received')
+      setTechnicalData(data.data)
     } catch (error) {
       console.error('Error fetching technical indicators:', error)
       setError(error.message || 'Failed to fetch technical indicators')
@@ -56,151 +58,131 @@ export default function TechnicalIndicators() {
     }
   }
 
-  // Process and deduplicate technical data
   const processedTechnicalData = useMemo(() => {
-    if (!technicalData.length) return { all: [], overbought: [], oversold: [], trending: [] }
+    if (!technicalData?.length) return { 
+      all: [], 
+      buy: [], 
+      sell: [], 
+      hold: [] 
+    }
 
-    const latestData = technicalData.reduce((acc, curr) => {
-      if (!acc[curr.SYMBOL] || new Date(curr.TIMESTAMP) > new Date(acc[curr.SYMBOL].TIMESTAMP)) {
-        acc[curr.SYMBOL] = curr
-      }
-      return acc
-    }, {})
-
-    const uniqueIndicators = Object.values(latestData)
+    const sortedData = [...technicalData].sort((a, b) => 
+      Math.abs(parseFloat(b.price_change) || 0) - Math.abs(parseFloat(a.price_change) || 0)
+    )
 
     return {
-      all: uniqueIndicators,
-      overbought: uniqueIndicators.filter(i => Number(i.RSI) > 70),
-      oversold: uniqueIndicators.filter(i => Number(i.RSI) < 30),
-      trending: uniqueIndicators.filter(i => i.TREND_SIGNAL === 'BULLISH' || i.TREND_SIGNAL === 'BEARISH')
+      all: sortedData,
+      buy: sortedData.filter(i => i.signal === 'buy'),
+      sell: sortedData.filter(i => i.signal === 'sell'),
+      hold: sortedData.filter(i => i.signal === 'hold' || !i.signal)
     }
   }, [technicalData])
 
-  const getTrendColor = (trend) => {
-    switch (trend) {
-      case 'BULLISH': return 'green'
-      case 'BEARISH': return 'red'
-      default: return 'gray'
+  const getSignalColor = (signal) => {
+    switch (signal) {
+      case 'buy': return 'green'
+      case 'sell': return 'red'
+      default: return 'yellow'
     }
   }
 
-  const getRSIColor = (rsi) => {
-    if (!rsi) return 'gray'
-    if (rsi > 70) return 'red'
-    if (rsi < 30) return 'green'
-    return 'yellow'
+  const renderIndicatorCard = (item) => {
+    // Safely parse numeric values with fallbacks
+    const priceChange = parseFloat(item.price_change) || 0
+    const rsi = parseFloat(item.rsi) || 0
+    const sma20 = parseFloat(item.sma_20) || 0
+    const ema50 = parseFloat(item.ema_50) || 0
+
+    return (
+      <Box key={item.coin} p={4} borderWidth="1px" borderRadius="md">
+        <HStack justify="space-between" mb={2}>
+          <Text fontWeight="bold">{item.coin || 'Unknown'}</Text>
+          <Badge colorScheme={getSignalColor(item.signal || 'hold')}>
+            {(item.signal || 'HOLD').toUpperCase()}
+          </Badge>
+        </HStack>
+        <Grid templateColumns="repeat(2, 1fr)" gap={4}>
+          <Stat>
+            <StatLabel>Price Change</StatLabel>
+            <StatNumber>
+              <StatArrow type={priceChange >= 0 ? 'increase' : 'decrease'} />
+              {Math.abs(priceChange).toFixed(2)}%
+            </StatNumber>
+          </Stat>
+          <Stat>
+            <StatLabel>RSI</StatLabel>
+            <StatNumber>{rsi.toFixed(2)}</StatNumber>
+            <StatHelpText>
+              {rsi > 70 ? 'Overbought' : rsi < 30 ? 'Oversold' : 'Neutral'}
+            </StatHelpText>
+          </Stat>
+        </Grid>
+        <Grid templateColumns="repeat(2, 1fr)" gap={4} mt={4}>
+          <Stat>
+            <StatLabel>SMA (20)</StatLabel>
+            <StatNumber>${sma20.toLocaleString(undefined, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2
+            })}</StatNumber>
+          </Stat>
+          <Stat>
+            <StatLabel>EMA (50)</StatLabel>
+            <StatNumber>${ema50.toLocaleString(undefined, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2
+            })}</StatNumber>
+          </Stat>
+        </Grid>
+      </Box>
+    )
   }
 
-  const getRSISignal = (rsi) => {
-    if (!rsi) return { text: 'Neutral', color: 'gray' }
-    if (rsi > 70) return { text: 'Overbought', color: 'red' }
-    if (rsi < 30) return { text: 'Oversold', color: 'green' }
-    return { text: 'Neutral', color: 'yellow' }
-  }
-
-  const formatPrice = (price) => {
-    if (!price) return '0.00'
-    return Number(price).toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    })
-  }
-
-  const formatRSI = (rsi) => {
-    if (!rsi) return '0.00'
-    return Number(rsi).toFixed(2)
-  }
-
-  const formatPercentage = (value) => {
-    if (!value) return '0.00'
-    return Number(value).toFixed(2)
-  }
-
-  const renderTechnicalTable = (data) => (
-    <Table variant="simple" size="sm">
-      <Thead>
-        <Tr>
-          <Th>Asset</Th>
-          <Th>Price</Th>
-          <Th>Trend</Th>
-          <Th>RSI (14)</Th>
-          <Th>Signal</Th>
-        </Tr>
-      </Thead>
-      <Tbody>
-        {data.length > 0 ? data.map((indicator, idx) => (
-          <Tr key={indicator.SYMBOL + idx}>
-            <Td fontWeight="medium">{indicator.SYMBOL || 'Unknown'}</Td>
-            <Td>${formatPrice(indicator.PRICE_USD)}</Td>
-            <Td>
-              <Badge 
-                colorScheme={getTrendColor(indicator.TREND_SIGNAL)}
-                display="flex"
-                alignItems="center"
-                width="fit-content"
-              >
-                <Icon 
-                  as={indicator.TREND_SIGNAL === 'BULLISH' ? FiTrendingUp : FiTrendingDown} 
-                  mr={1}
-                />
-                {indicator.TREND_SIGNAL || 'NEUTRAL'}
-              </Badge>
-            </Td>
-            <Td>
-              <Badge colorScheme={getRSIColor(indicator.RSI)}>
-                {formatRSI(indicator.RSI)}
-              </Badge>
-            </Td>
-            <Td>
-              <Text color={getRSIColor(indicator.RSI) + '.500'}>
-                {getRSISignal(indicator.RSI).text}
-              </Text>
-            </Td>
-          </Tr>
-        )) : (
-          <Tr>
-            <Td colSpan={5}>
-              <Text color="gray.500" textAlign="center">No data available</Text>
-            </Td>
-          </Tr>
-        )}
-      </Tbody>
-    </Table>
+  if (isLoading) return (
+    <Box p={4} textAlign="center">
+      <Spinner size="xl" />
+    </Box>
   )
 
-  if (isLoading) {
-    return (
-      <HStack spacing={4} justify="center" py={4}>
-        <Spinner />
-        <Text>Loading technical indicators...</Text>
-      </HStack>
-    )
-  }
-
-  if (error) {
-    return (
-      <Alert status="error">
-        <AlertIcon />
-        <Text>{error}</Text>
-      </Alert>
-    )
-  }
+  if (error) return (
+    <Alert status="error">
+      <AlertIcon />
+      {error}
+    </Alert>
+  )
 
   return (
-    <Tabs variant="soft-rounded" colorScheme="green">
-      <TabList>
-        <Tab>All Assets ({processedTechnicalData.all.length})</Tab>
-        <Tab>Overbought ({processedTechnicalData.overbought.length})</Tab>
-        <Tab>Oversold ({processedTechnicalData.oversold.length})</Tab>
-        <Tab>Trending ({processedTechnicalData.trending.length})</Tab>
-      </TabList>
-      <TabPanels>
-        <TabPanel>{renderTechnicalTable(processedTechnicalData.all)}</TabPanel>
-        <TabPanel>{renderTechnicalTable(processedTechnicalData.overbought)}</TabPanel>
-        <TabPanel>{renderTechnicalTable(processedTechnicalData.oversold)}</TabPanel>
-        <TabPanel>{renderTechnicalTable(processedTechnicalData.trending)}</TabPanel>
-      </TabPanels>
-    </Tabs>
+    <Box bg={bgColor} p={4} borderRadius="lg" shadow="sm">
+      <Tabs variant="enclosed">
+        <TabList>
+          <Tab>All ({processedTechnicalData.all.length})</Tab>
+          <Tab>Buy ({processedTechnicalData.buy.length})</Tab>
+          <Tab>Sell ({processedTechnicalData.sell.length})</Tab>
+          <Tab>Hold ({processedTechnicalData.hold.length})</Tab>
+        </TabList>
+
+        <TabPanels>
+          <TabPanel>
+            <VStack spacing={4} align="stretch">
+              {processedTechnicalData.all.map(item => renderIndicatorCard(item))}
+            </VStack>
+          </TabPanel>
+          <TabPanel>
+            <VStack spacing={4} align="stretch">
+              {processedTechnicalData.buy.map(item => renderIndicatorCard(item))}
+            </VStack>
+          </TabPanel>
+          <TabPanel>
+            <VStack spacing={4} align="stretch">
+              {processedTechnicalData.sell.map(item => renderIndicatorCard(item))}
+            </VStack>
+          </TabPanel>
+          <TabPanel>
+            <VStack spacing={4} align="stretch">
+              {processedTechnicalData.hold.map(item => renderIndicatorCard(item))}
+            </VStack>
+          </TabPanel>
+        </TabPanels>
+      </Tabs>
+    </Box>
   )
 } 

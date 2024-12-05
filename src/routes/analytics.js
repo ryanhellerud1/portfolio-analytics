@@ -247,9 +247,11 @@ router.get('/technical', async (req, res) => {
       'technical',
       `
       SELECT 
-        h.COIN_ID,
         h.SYMBOL as COIN,
-        p.PRICE_CHANGE_24H_PCT as PRICE_CHANGE,
+        p.PRICE_USD,
+        p.PRICE_CHANGE_24H_PCT,
+        LAG(p.PRICE_USD, 20) OVER (PARTITION BY h.COIN_ID ORDER BY p.TIMESTAMP) as PRICE_20D_AGO,
+        LAG(p.PRICE_USD, 50) OVER (PARTITION BY h.COIN_ID ORDER BY p.TIMESTAMP) as PRICE_50D_AGO,
         CASE 
           WHEN p.PRICE_CHANGE_24H_PCT > 5 THEN 'buy'
           WHEN p.PRICE_CHANGE_24H_PCT < -5 THEN 'sell'
@@ -260,8 +262,12 @@ router.get('/technical', async (req, res) => {
       `,
       (rows) => rows.map(row => ({
         coin: row.COIN,
-        price_change: row.PRICE_CHANGE,
-        signal: row.SIGNAL
+        price_change: row.PRICE_CHANGE_24H_PCT,
+        signal: row.SIGNAL,
+        sma_20: row.PRICE_20D_AGO || row.PRICE_USD,
+        ema_50: row.PRICE_50D_AGO || row.PRICE_USD,
+        rsi: calculateRSI(row.PRICE_CHANGE_24H_PCT),
+        macd: calculateMACD(row.PRICE_USD, row.PRICE_20D_AGO || row.PRICE_USD)
       }))
     )
     res.json({ data })
@@ -271,30 +277,81 @@ router.get('/technical', async (req, res) => {
   }
 })
 
+// Helper functions for technical calculations
+const calculateRSI = (priceChange) => {
+  // Simple RSI calculation based on 24h price change
+  const gain = Math.max(priceChange, 0)
+  const loss = Math.abs(Math.min(priceChange, 0))
+  const rs = gain / (loss || 1)
+  return 100 - (100 / (1 + rs))
+}
+
+const calculateMACD = (currentPrice, oldPrice) => {
+  // Simple MACD calculation
+  return currentPrice - oldPrice
+}
+
 // Risk analysis endpoint
 router.get('/risk', async (req, res) => {
   try {
     const data = await getDataWithFallback(
       'risk',
       `
+      WITH price_stats AS (
+        SELECT 
+          h.COIN_ID,
+          h.SYMBOL,
+          p.PRICE_CHANGE_24H_PCT,
+          p.VOLUME_24H_USD,
+          p.MARKET_CAP_USD,
+          p.TIMESTAMP,
+          STDDEV(p.PRICE_CHANGE_24H_PCT) OVER (
+            PARTITION BY h.COIN_ID 
+            ORDER BY p.TIMESTAMP 
+            ROWS BETWEEN 7 PRECEDING AND CURRENT ROW
+          ) as VOLATILITY_7D,
+          MIN(p.PRICE_CHANGE_24H_PCT) OVER (
+            PARTITION BY h.COIN_ID 
+            ORDER BY p.TIMESTAMP 
+            ROWS BETWEEN 7 PRECEDING AND CURRENT ROW
+          ) as MIN_CHANGE_7D,
+          MAX(p.PRICE_CHANGE_24H_PCT) OVER (
+            PARTITION BY h.COIN_ID 
+            ORDER BY p.TIMESTAMP 
+            ROWS BETWEEN 7 PRECEDING AND CURRENT ROW
+          ) as MAX_CHANGE_7D
+        FROM HOLDINGS h
+        JOIN PRICES p ON h.COIN_ID = p.COIN_ID
+      ),
+      latest_stats AS (
+        SELECT 
+          ps.*,
+          ROW_NUMBER() OVER (PARTITION BY COIN_ID ORDER BY TIMESTAMP DESC) as rn
+        FROM price_stats ps
+      )
       SELECT 
-        h.COIN_ID,
-        h.SYMBOL,
+        SYMBOL,
         CASE 
-          WHEN p.PRICE_CHANGE_24H_PCT > 10 THEN 'HIGH_RISK'
-          WHEN p.PRICE_CHANGE_24H_PCT > 5 THEN 'MEDIUM_RISK'
+          WHEN VOLATILITY_7D > 10 THEN 'HIGH_RISK'
+          WHEN VOLATILITY_7D > 5 THEN 'MEDIUM_RISK'
           ELSE 'LOW_RISK'
         END as RISK_CATEGORY,
-        p.PRICE_CHANGE_24H_PCT as DAILY_VOLATILITY,
-        p.VOLUME_24H_USD / NULLIF(p.MARKET_CAP_USD, 0) as VOLUME_TO_MCAP_RATIO
-      FROM HOLDINGS h
-      JOIN (${getLatestPricesQuery()}) p ON h.COIN_ID = p.COIN_ID
+        VOLATILITY_7D as DAILY_VOLATILITY,
+        VOLUME_24H_USD / NULLIF(MARKET_CAP_USD, 0) as VOLUME_TO_MCAP_RATIO,
+        MAX_CHANGE_7D as MAX_7D_RETURN,
+        MIN_CHANGE_7D as MIN_7D_RETURN,
+        ABS(MIN_CHANGE_7D) as MAX_DRAWDOWN
+      FROM latest_stats
+      WHERE rn = 1
       `,
       (rows) => rows.map(row => ({
         SYMBOL: row.SYMBOL,
         RISK_CATEGORY: row.RISK_CATEGORY,
-        DAILY_VOLATILITY: row.DAILY_VOLATILITY,
-        VOLUME_TO_MCAP_RATIO: row.VOLUME_TO_MCAP_RATIO
+        DAILY_VOLATILITY: parseFloat(row.DAILY_VOLATILITY || 0).toFixed(2),
+        VOLUME_TO_MCAP_RATIO: parseFloat(row.VOLUME_TO_MCAP_RATIO || 0).toFixed(4),
+        MAX_7D_RETURN: parseFloat(row.MAX_7D_RETURN || 0).toFixed(2),
+        MIN_7D_RETURN: parseFloat(row.MIN_7D_RETURN || 0).toFixed(2),
+        MAX_DRAWDOWN: parseFloat(row.MAX_DRAWDOWN || 0).toFixed(2)
       }))
     )
     res.json({ data })
@@ -310,24 +367,43 @@ router.get('/momentum', async (req, res) => {
     const data = await getDataWithFallback(
       'momentum',
       `
+      WITH price_momentum AS (
+        SELECT 
+          h.SYMBOL as COIN,
+          p.PRICE_CHANGE_24H_PCT,
+          p.TIMESTAMP,
+          AVG(p.PRICE_CHANGE_24H_PCT) OVER (
+            PARTITION BY h.COIN_ID 
+            ORDER BY p.TIMESTAMP 
+            ROWS BETWEEN 7 PRECEDING AND CURRENT ROW
+          ) as AVG_CHANGE_7D
+        FROM HOLDINGS h
+        JOIN PRICES p ON h.COIN_ID = p.COIN_ID
+      ),
+      latest_momentum AS (
+        SELECT 
+          pm.*,
+          ROW_NUMBER() OVER (PARTITION BY COIN ORDER BY TIMESTAMP DESC) as rn
+        FROM price_momentum pm
+      )
       SELECT 
-        h.SYMBOL as COIN,
-        p.PRICE_CHANGE_24H_PCT / 100 as MOMENTUM_SCORE,
+        COIN,
+        PRICE_CHANGE_24H_PCT / 100 as MOMENTUM_SCORE,
         CASE 
-          WHEN p.PRICE_CHANGE_24H_PCT > 0 THEN 'bullish'
+          WHEN AVG_CHANGE_7D > 0 THEN 'bullish'
           ELSE 'bearish'
         END as TREND,
         CASE 
-          WHEN ABS(p.PRICE_CHANGE_24H_PCT) > 10 THEN 'strong'
-          WHEN ABS(p.PRICE_CHANGE_24H_PCT) > 5 THEN 'moderate'
+          WHEN ABS(AVG_CHANGE_7D) > 10 THEN 'strong'
+          WHEN ABS(AVG_CHANGE_7D) > 5 THEN 'moderate'
           ELSE 'weak'
         END as STRENGTH
-      FROM HOLDINGS h
-      JOIN (${getLatestPricesQuery()}) p ON h.COIN_ID = p.COIN_ID
+      FROM latest_momentum
+      WHERE rn = 1
       `,
       (rows) => rows.map(row => ({
         coin: row.COIN,
-        momentum_score: row.MOMENTUM_SCORE,
+        momentum_score: parseFloat(row.MOMENTUM_SCORE || 0).toFixed(2),
         trend: row.TREND,
         strength: row.STRENGTH
       }))

@@ -75,23 +75,54 @@ function PortfolioAnalytics() {
         throw new Error(alertsData.error)
       }
       
-      // Ensure data is an array and values are numbers
-      const formattedAlerts = (alertsData.data || []).map(alert => ({
-        coin_id: alert.coin_id || '',
-        symbol: alert.symbol || '',
-        name: alert.name || '',
-        current_price: Number(alert.current_price) || 0,
-        price_change_24h_pct: Number(alert.price_change_24h_pct) || 0,
-        alert_type: alert.alert_type || 'Normal'
-      }))
-      
-      setAlerts(formattedAlerts)
+      setAlerts(alertsData.data || [])
     } catch (error) {
       console.error('Error fetching analytics:', error)
       setError(error.message || 'Failed to fetch analytics')
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const getAlertStatus = (severity) => {
+    switch (severity?.toLowerCase()) {
+      case 'warning':
+        return 'warning'
+      case 'info':
+        return 'info'
+      case 'low':
+        return 'success'
+      default:
+        return 'info'  // default fallback
+    }
+  }
+
+  const renderAlerts = () => {
+    if (!alerts || !alerts.length) {
+      return (
+        <Alert status="info">
+          <AlertIcon />
+          No active alerts at this time
+        </Alert>
+      )
+    }
+
+    return alerts.map((alert, index) => (
+      <Alert
+        key={`${alert.coin}-${index}`}
+        status={getAlertStatus(alert.severity)}
+        variant="left-accent"
+        mb={2}
+      >
+        <AlertIcon />
+        <Box flex="1">
+          <AlertTitle>{alert.coin}</AlertTitle>
+          <AlertDescription>
+            {alert.message}
+          </AlertDescription>
+        </Box>
+      </Alert>
+    ))
   }
 
   if (isLoading) {
@@ -178,39 +209,12 @@ function PortfolioAnalytics() {
       </Box>
 
       {/* Price Alerts */}
-      <Box p={5} shadow="md" borderWidth="1px" w="full" bg={bgColor}>
-        <Text fontSize="xl" fontWeight="bold" mb={4}>
+      <Box p={4} bg={bgColor} borderRadius="lg" shadow="sm">
+        <Text fontSize="lg" fontWeight="bold" mb={4}>
           Price Alerts
         </Text>
-        <VStack spacing={3} align="stretch">
-          {alerts.length > 0 ? alerts.map(alert => (
-            <Alert
-              key={alert.coin_id}
-              status={
-                alert.alert_type === 'High Volatility' ? 'warning' :
-                alert.alert_type === 'Significant Rise' ? 'success' :
-                alert.alert_type === 'Significant Drop' ? 'error' :
-                'info'
-              }
-            >
-              <AlertIcon />
-              <Box>
-                <AlertTitle>{alert.symbol} ({alert.name})</AlertTitle>
-                <AlertDescription>
-                  Current Price: ${alert.current_price.toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                  })}
-                  <br />
-                  24h Change: {alert.price_change_24h_pct.toFixed(2)}%
-                  <br />
-                  Status: {alert.alert_type}
-                </AlertDescription>
-              </Box>
-            </Alert>
-          )) : (
-            <Text color="gray.500">No price alerts at this time</Text>
-          )}
+        <VStack spacing={2} align="stretch">
+          {renderAlerts()}
         </VStack>
       </Box>
     </VStack>

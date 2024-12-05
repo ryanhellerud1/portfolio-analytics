@@ -50,143 +50,101 @@ export default function PriceMomentum() {
   const processedMomentumData = useMemo(() => {
     if (!momentum.length) return {
       all: [],
-      strongUptrend: [],
-      strongDowntrend: [],
-      volatile: []
+      strong: [],
+      moderate: [],
+      weak: []
     }
 
-    // First, deduplicate by SYMBOL if there are any duplicates
-    const uniqueData = momentum.reduce((acc, curr) => {
-      if (!acc[curr.SYMBOL]) {
-        acc[curr.SYMBOL] = curr
-      }
-      return acc
-    }, {})
-
-    const sortedData = Object.values(uniqueData).sort((a, b) => Math.abs(b.MOMENTUM_1D) - Math.abs(a.MOMENTUM_1D))
+    const sortedData = [...momentum].sort((a, b) => Math.abs(b.momentum_score) - Math.abs(a.momentum_score))
     
-    // Create categories without duplicating data
-    const categories = {
-      strongUptrend: sortedData.filter(item => item.TREND_DIRECTION === 'STRONG_UPTREND'),
-      strongDowntrend: sortedData.filter(item => item.TREND_DIRECTION === 'STRONG_DOWNTREND'),
-      volatile: sortedData.filter(item => Math.abs(item.MOMENTUM_1D) > 10)
-    }
-
     return {
-      ...categories,
-      all: sortedData
+      all: sortedData,
+      strong: sortedData.filter(item => item.strength === 'strong'),
+      moderate: sortedData.filter(item => item.strength === 'moderate'),
+      weak: sortedData.filter(item => item.strength === 'weak')
     }
   }, [momentum])
 
-  const getTrendColor = (trend) => {
-    switch (trend) {
-      case 'STRONG_UPTREND': return 'green'
-      case 'UPTREND': return 'teal'
-      case 'STRONG_DOWNTREND': return 'red'
-      case 'DOWNTREND': return 'orange'
-      default: return 'gray'
+  const getTrendColor = (trend, strength) => {
+    if (trend === 'bullish') {
+      return strength === 'strong' ? 'green' : strength === 'moderate' ? 'teal' : 'cyan'
+    } else {
+      return strength === 'strong' ? 'red' : strength === 'moderate' ? 'orange' : 'yellow'
     }
   }
 
   const formatMomentum = (value) => {
     if (value === null || value === undefined) return '0.00'
-    return Number(value).toFixed(2)
+    return (Number(value) * 100).toFixed(2)
   }
 
   const renderMomentumCard = (item) => (
-    <Box key={item.SYMBOL} p={4} borderWidth="1px" borderRadius="md">
+    <Box key={item.coin} p={4} borderWidth="1px" borderRadius="md">
       <HStack justify="space-between" mb={2}>
-        <Text fontWeight="bold">{item.SYMBOL || 'Unknown'}</Text>
-        <Badge colorScheme={getTrendColor(item.TREND_DIRECTION)}>
-          {(item.TREND_DIRECTION || 'UNKNOWN').replace('_', ' ')}
+        <Text fontWeight="bold">{item.coin}</Text>
+        <Badge colorScheme={getTrendColor(item.trend, item.strength)}>
+          {item.trend.toUpperCase()} ({item.strength})
         </Badge>
       </HStack>
-      <HStack spacing={6}>
-        <Stat>
-          <StatLabel>24h</StatLabel>
-          <StatNumber>
-            <StatArrow type={Number(item.MOMENTUM_1D || 0) >= 0 ? 'increase' : 'decrease'} />
-            {formatMomentum(item.MOMENTUM_1D)}%
-          </StatNumber>
-        </Stat>
-        <Stat>
-          <StatLabel>7d</StatLabel>
-          <StatNumber>
-            <StatArrow type={Number(item.MOMENTUM_7D || 0) >= 0 ? 'increase' : 'decrease'} />
-            {formatMomentum(item.MOMENTUM_7D)}%
-          </StatNumber>
-        </Stat>
-        <Stat>
-          <StatLabel>30d</StatLabel>
-          <StatNumber>
-            <StatArrow type={Number(item.MOMENTUM_30D || 0) >= 0 ? 'increase' : 'decrease'} />
-            {formatMomentum(item.MOMENTUM_30D)}%
-          </StatNumber>
-        </Stat>
-      </HStack>
+      <Stat>
+        <StatLabel>Momentum Score</StatLabel>
+        <StatNumber>
+          <StatArrow type={item.trend === 'bullish' ? 'increase' : 'decrease'} />
+          {formatMomentum(item.momentum_score)}%
+        </StatNumber>
+        <StatHelpText>
+          {item.strength.charAt(0).toUpperCase() + item.strength.slice(1)} {item.trend}
+        </StatHelpText>
+      </Stat>
     </Box>
   )
 
-  if (isLoading) {
-    return (
-      <HStack spacing={4} justify="center" py={4}>
-        <Spinner />
-        <Text>Loading momentum data...</Text>
-      </HStack>
-    )
-  }
+  if (isLoading) return (
+    <Box p={4} textAlign="center">
+      <Spinner size="xl" />
+    </Box>
+  )
 
-  if (error) {
-    return (
-      <Alert status="error">
-        <AlertIcon />
-        <Text>{error}</Text>
-      </Alert>
-    )
-  }
+  if (error) return (
+    <Alert status="error">
+      <AlertIcon />
+      {error}
+    </Alert>
+  )
 
   return (
-    <Tabs variant="soft-rounded" colorScheme="purple">
-      <TabList>
-        <Tab>All Assets ({processedMomentumData.all.length})</Tab>
-        <Tab>Strong Uptrend ({processedMomentumData.strongUptrend.length})</Tab>
-        <Tab>Strong Downtrend ({processedMomentumData.strongDowntrend.length})</Tab>
-        <Tab>High Volatility ({processedMomentumData.volatile.length})</Tab>
-      </TabList>
-      <TabPanels>
-        <TabPanel>
-          <VStack spacing={4} align="stretch">
-            {processedMomentumData.all.map(renderMomentumCard)}
-            {!processedMomentumData.all.length && (
-              <Text color="gray.500" textAlign="center">No momentum data available</Text>
-            )}
-          </VStack>
-        </TabPanel>
-        <TabPanel>
-          <VStack spacing={4} align="stretch">
-            {processedMomentumData.strongUptrend.map(renderMomentumCard)}
-            {!processedMomentumData.strongUptrend.length && (
-              <Text color="gray.500" textAlign="center">No assets in strong uptrend</Text>
-            )}
-          </VStack>
-        </TabPanel>
-        <TabPanel>
-          <VStack spacing={4} align="stretch">
-            {processedMomentumData.strongDowntrend.map(renderMomentumCard)}
-            {!processedMomentumData.strongDowntrend.length && (
-              <Text color="gray.500" textAlign="center">No assets in strong downtrend</Text>
-            )}
-          </VStack>
-        </TabPanel>
-        <TabPanel>
-          <VStack spacing={4} align="stretch">
-            {processedMomentumData.volatile.map(renderMomentumCard)}
-            {!processedMomentumData.volatile.length && (
-              <Text color="gray.500" textAlign="center">No highly volatile assets</Text>
-            )}
-          </VStack>
-        </TabPanel>
-      </TabPanels>
-    </Tabs>
+    <Box bg={bgColor} p={4} borderRadius="lg" shadow="sm">
+      <Tabs variant="enclosed">
+        <TabList>
+          <Tab>All ({processedMomentumData.all.length})</Tab>
+          <Tab>Strong ({processedMomentumData.strong.length})</Tab>
+          <Tab>Moderate ({processedMomentumData.moderate.length})</Tab>
+          <Tab>Weak ({processedMomentumData.weak.length})</Tab>
+        </TabList>
+
+        <TabPanels>
+          <TabPanel>
+            <VStack spacing={4} align="stretch">
+              {processedMomentumData.all.map(item => renderMomentumCard(item))}
+            </VStack>
+          </TabPanel>
+          <TabPanel>
+            <VStack spacing={4} align="stretch">
+              {processedMomentumData.strong.map(item => renderMomentumCard(item))}
+            </VStack>
+          </TabPanel>
+          <TabPanel>
+            <VStack spacing={4} align="stretch">
+              {processedMomentumData.moderate.map(item => renderMomentumCard(item))}
+            </VStack>
+          </TabPanel>
+          <TabPanel>
+            <VStack spacing={4} align="stretch">
+              {processedMomentumData.weak.map(item => renderMomentumCard(item))}
+            </VStack>
+          </TabPanel>
+        </TabPanels>
+      </Tabs>
+    </Box>
   )
 } 

@@ -17,13 +17,16 @@ import {
   TabList,
   Tab,
   TabPanels,
-  TabPanel
+  TabPanel,
+  Alert,
+  AlertIcon
 } from '@chakra-ui/react'
 import { useEffect, useState, useMemo } from 'react'
 
 export default function VolatilityAnalysis() {
   const [volatilityData, setVolatilityData] = useState([])
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState(null)
   const bgColor = useColorModeValue('white', 'gray.700')
 
   useEffect(() => {
@@ -32,11 +35,15 @@ export default function VolatilityAnalysis() {
 
   const fetchVolatilityData = async () => {
     try {
+      setIsLoading(true)
+      setError(null)
       const response = await fetch('/api/analytics/risk')
       const data = await response.json()
+      if (!data.data) throw new Error('No data received')
       setVolatilityData(data.data)
     } catch (error) {
       console.error('Error fetching volatility data:', error)
+      setError(error.message || 'Failed to fetch volatility data')
     } finally {
       setIsLoading(false)
     }
@@ -66,12 +73,11 @@ export default function VolatilityAnalysis() {
   const renderRiskCard = (item) => {
     const riskCategory = item.RISK_CATEGORY || 'UNKNOWN_RISK'
     const symbol = item.SYMBOL || 'Unknown'
-    const dailyVolatility = item.DAILY_VOLATILITY || 0
-    const sharpeRatio = item.SHARPE_RATIO || 0
-    const var95 = item.VAR_95 || 0
-    const max7dReturn = item.MAX_7D_RETURN || 0
-    const min7dReturn = item.MIN_7D_RETURN || 0
-    const maxDrawdown = item.MAX_DRAWDOWN || 0
+    const dailyVolatility = parseFloat(item.DAILY_VOLATILITY || 0)
+    const volumeToMcap = parseFloat(item.VOLUME_TO_MCAP_RATIO || 0)
+    const max7dReturn = parseFloat(item.MAX_7D_RETURN || 0)
+    const min7dReturn = parseFloat(item.MIN_7D_RETURN || 0)
+    const maxDrawdown = parseFloat(item.MAX_DRAWDOWN || 0)
 
     return (
       <Box key={symbol} p={4} borderWidth="1px" borderRadius="md">
@@ -80,24 +86,22 @@ export default function VolatilityAnalysis() {
           <Badge colorScheme={
             riskCategory === 'HIGH_RISK' ? 'red' : 
             riskCategory === 'MEDIUM_RISK' ? 'yellow' : 
-            riskCategory === 'LOW_RISK' ? 'green' : 'gray'
+            'green'
           }>
             {riskCategory.replace(/_/g, ' ')}
           </Badge>
         </HStack>
-        <Grid templateColumns="repeat(3, 1fr)" gap={4}>
+        <Grid templateColumns="repeat(2, 1fr)" gap={4}>
           <Stat>
             <StatLabel>Daily Volatility</StatLabel>
             <StatNumber>{dailyVolatility.toFixed(2)}%</StatNumber>
           </Stat>
           <Stat>
-            <StatLabel>Sharpe Ratio</StatLabel>
-            <StatNumber>{sharpeRatio.toFixed(2)}</StatNumber>
+            <StatLabel>Volume/MCap Ratio</StatLabel>
+            <StatNumber>{(volumeToMcap * 100).toFixed(2)}%</StatNumber>
           </Stat>
-          <Stat>
-            <StatLabel>Value at Risk (95%)</StatLabel>
-            <StatNumber>{var95.toFixed(2)}%</StatNumber>
-          </Stat>
+        </Grid>
+        <Grid templateColumns="repeat(3, 1fr)" gap={4} mt={4}>
           <Stat>
             <StatLabel>Max 7D Return</StatLabel>
             <StatNumber>
@@ -114,67 +118,59 @@ export default function VolatilityAnalysis() {
           </Stat>
           <Stat>
             <StatLabel>Max Drawdown</StatLabel>
-            <StatNumber>
-              <StatArrow type="decrease" />
-              {Math.abs(maxDrawdown).toFixed(2)}%
-            </StatNumber>
+            <StatNumber>{maxDrawdown.toFixed(2)}%</StatNumber>
           </Stat>
         </Grid>
       </Box>
     )
   }
 
-  if (isLoading) {
-    return (
-      <HStack spacing={4} justify="center" py={4}>
-        <Spinner />
-        <Text>Loading risk analysis...</Text>
-      </HStack>
-    )
-  }
+  if (isLoading) return (
+    <Box p={4} textAlign="center">
+      <Spinner size="xl" />
+    </Box>
+  )
+
+  if (error) return (
+    <Alert status="error">
+      <AlertIcon />
+      {error}
+    </Alert>
+  )
 
   return (
-    <Tabs variant="soft-rounded" colorScheme="red">
-      <TabList>
-        <Tab>All Assets ({riskCategories.all.length})</Tab>
-        <Tab>High Risk ({riskCategories.highRisk.length})</Tab>
-        <Tab>Medium Risk ({riskCategories.mediumRisk.length})</Tab>
-        <Tab>Low Risk ({riskCategories.lowRisk.length})</Tab>
-      </TabList>
-      <TabPanels>
-        <TabPanel>
-          <VStack spacing={4} align="stretch">
-            {riskCategories.all.map(renderRiskCard)}
-            {!riskCategories.all.length && (
-              <Text color="gray.500" textAlign="center">No risk analysis data available</Text>
-            )}
-          </VStack>
-        </TabPanel>
-        <TabPanel>
-          <VStack spacing={4} align="stretch">
-            {riskCategories.highRisk.map(renderRiskCard)}
-            {!riskCategories.highRisk.length && (
-              <Text color="gray.500" textAlign="center">No high risk assets found</Text>
-            )}
-          </VStack>
-        </TabPanel>
-        <TabPanel>
-          <VStack spacing={4} align="stretch">
-            {riskCategories.mediumRisk.map(renderRiskCard)}
-            {!riskCategories.mediumRisk.length && (
-              <Text color="gray.500" textAlign="center">No medium risk assets found</Text>
-            )}
-          </VStack>
-        </TabPanel>
-        <TabPanel>
-          <VStack spacing={4} align="stretch">
-            {riskCategories.lowRisk.map(renderRiskCard)}
-            {!riskCategories.lowRisk.length && (
-              <Text color="gray.500" textAlign="center">No low risk assets found</Text>
-            )}
-          </VStack>
-        </TabPanel>
-      </TabPanels>
-    </Tabs>
+    <Box bg={bgColor} p={4} borderRadius="lg" shadow="sm">
+      <Tabs variant="enclosed">
+        <TabList>
+          <Tab>All ({riskCategories.all.length})</Tab>
+          <Tab>High Risk ({riskCategories.highRisk.length})</Tab>
+          <Tab>Medium Risk ({riskCategories.mediumRisk.length})</Tab>
+          <Tab>Low Risk ({riskCategories.lowRisk.length})</Tab>
+        </TabList>
+
+        <TabPanels>
+          <TabPanel>
+            <VStack spacing={4} align="stretch">
+              {riskCategories.all.map(item => renderRiskCard(item))}
+            </VStack>
+          </TabPanel>
+          <TabPanel>
+            <VStack spacing={4} align="stretch">
+              {riskCategories.highRisk.map(item => renderRiskCard(item))}
+            </VStack>
+          </TabPanel>
+          <TabPanel>
+            <VStack spacing={4} align="stretch">
+              {riskCategories.mediumRisk.map(item => renderRiskCard(item))}
+            </VStack>
+          </TabPanel>
+          <TabPanel>
+            <VStack spacing={4} align="stretch">
+              {riskCategories.lowRisk.map(item => renderRiskCard(item))}
+            </VStack>
+          </TabPanel>
+        </TabPanels>
+      </Tabs>
+    </Box>
   )
 } 

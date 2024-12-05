@@ -7,7 +7,7 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: REACT_APP_API_URL
+      - key: VITE_API_URL
         value: https://crypto-tracker-api-djbp.onrender.com
       - key: COINGECKO_API_URL
         value: https://api.coingecko.com/api/v3
