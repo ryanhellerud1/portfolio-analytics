@@ -39,7 +39,7 @@ const app = express()
 
 // CORS configuration
 const allowedOrigins = process.env.NODE_ENV === 'production'
-  ? ['https://portfolio-metrics.netlify.app', 'https://crypto-tracker-api.onrender.com']
+  ? ['https://portfolio-metrics.netlify.app']
   : ['http://localhost:5173', 'http://localhost:3001']
 
 app.use(cors({
@@ -55,10 +55,25 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  exposedHeaders: ['Access-Control-Allow-Origin'],
+  maxAge: 86400 // 24 hours
 }))
 
 app.use(express.json())
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV,
+    allowedOrigins
+  })
+})
+
+// Add error handling for preflight requests
+app.options('*', cors())
 
 // Create axios instance for CoinGecko with API key
 const coingeckoApi = axios.create({
