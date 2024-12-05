@@ -1,5 +1,5 @@
 const API_BASE = process.env.NODE_ENV === 'production'
-  ? 'https://crypto-tracker-api.onrender.com'
+  ? 'https://crypto-tracker-api-djbp.onrender.com'
   : 'http://localhost:3001'
 
 const defaultHeaders = {
