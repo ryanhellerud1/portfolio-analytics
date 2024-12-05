@@ -12,11 +12,21 @@ import { validateSnowflakeConfig } from './src/utils/snowflake.js'
 // Configure dotenv at the start
 dotenv.config()
 
+// Set up file paths
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const { PythonShell } = pkg
+
 const app = express()
 
 // Basic middleware
 app.use(express.json())
-app.use(cors())
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production' 
+    ? 'https://portfolio-metrics.netlify.app'
+    : 'http://localhost:5173',
+  credentials: true
+}))
 
 // Add request logging with more details
 app.use((req, res, next) => {
@@ -33,7 +43,7 @@ app.get('/', (req, res) => {
   res.json({
     message: 'Crypto Tracker API',
     status: 'running',
-    endpoints: ['/health', '/debug', '/api/prices', '/api/markets', '/api/search']
+    endpoints: ['/health', '/debug', '/api/prices', '/api/markets', '/api/search', '/api/analytics/*']
   })
 })
 
@@ -69,11 +79,6 @@ app.get('/debug', (req, res) => {
 const COINGECKO_API_URL = process.env.COINGECKO_API_URL || 'https://api.coingecko.com/api/v3'
 const COINGECKO_API_KEY = process.env.COINGECKO_API_KEY || 'CG-DEMO-KEY'
 
-// Setup path for Python scripts
-const { PythonShell } = pkg
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-
 // Create axios instance for CoinGecko
 const coingeckoApi = axios.create({
   baseURL: COINGECKO_API_URL,
@@ -104,10 +109,7 @@ coingeckoApi.interceptors.request.use(request => {
 })
 
 // Mount analytics routes first (before other routes)
-app.use('/api/analytics', (req, res, next) => {
-  console.log('[Analytics Route]', req.method, req.url)
-  next()
-}, analyticsRoutes)
+app.use('/api/analytics', analyticsRoutes)
 
 // Price endpoint
 app.get('/api/prices', async (req, res) => {
@@ -233,7 +235,7 @@ app.get('/api/search', async (req, res) => {
   }
 })
 
-// Error handling middleware with more details
+// Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Error details:', {
     message: err.message,
@@ -250,7 +252,7 @@ app.use((err, req, res, next) => {
   })
 })
 
-// 404 handler with more context
+// 404 handler
 app.use((req, res) => {
   console.log('404 Not Found:', {
     path: req.path,

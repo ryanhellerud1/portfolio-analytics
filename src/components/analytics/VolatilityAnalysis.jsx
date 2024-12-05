@@ -63,52 +63,66 @@ export default function VolatilityAnalysis() {
     }
   }, [volatilityData])
 
-  const renderRiskCard = (item) => (
-    <Box key={item.SYMBOL} p={4} borderWidth="1px" borderRadius="md">
-      <HStack justify="space-between" mb={2}>
-        <Text fontWeight="bold">{item.SYMBOL}</Text>
-        <Badge colorScheme={item.RISK_CATEGORY === 'HIGH_RISK' ? 'red' : 
-          item.RISK_CATEGORY === 'MEDIUM_RISK' ? 'yellow' : 'green'}>
-          {item.RISK_CATEGORY.replace('_', ' ')}
-        </Badge>
-      </HStack>
-      <Grid templateColumns="repeat(3, 1fr)" gap={4}>
-        <Stat>
-          <StatLabel>Daily Volatility</StatLabel>
-          <StatNumber>{item.DAILY_VOLATILITY.toFixed(2)}%</StatNumber>
-        </Stat>
-        <Stat>
-          <StatLabel>Sharpe Ratio</StatLabel>
-          <StatNumber>{item.SHARPE_RATIO.toFixed(2)}</StatNumber>
-        </Stat>
-        <Stat>
-          <StatLabel>Value at Risk (95%)</StatLabel>
-          <StatNumber>{item.VAR_95.toFixed(2)}%</StatNumber>
-        </Stat>
-        <Stat>
-          <StatLabel>Max 7D Return</StatLabel>
-          <StatNumber>
-            <StatArrow type="increase" />
-            {item.MAX_7D_RETURN.toFixed(2)}%
-          </StatNumber>
-        </Stat>
-        <Stat>
-          <StatLabel>Min 7D Return</StatLabel>
-          <StatNumber>
-            <StatArrow type="decrease" />
-            {item.MIN_7D_RETURN.toFixed(2)}%
-          </StatNumber>
-        </Stat>
-        <Stat>
-          <StatLabel>Max Drawdown</StatLabel>
-          <StatNumber>
-            <StatArrow type="decrease" />
-            {Math.abs(item.MAX_DRAWDOWN).toFixed(2)}%
-          </StatNumber>
-        </Stat>
-      </Grid>
-    </Box>
-  )
+  const renderRiskCard = (item) => {
+    const riskCategory = item.RISK_CATEGORY || 'UNKNOWN_RISK'
+    const symbol = item.SYMBOL || 'Unknown'
+    const dailyVolatility = item.DAILY_VOLATILITY || 0
+    const sharpeRatio = item.SHARPE_RATIO || 0
+    const var95 = item.VAR_95 || 0
+    const max7dReturn = item.MAX_7D_RETURN || 0
+    const min7dReturn = item.MIN_7D_RETURN || 0
+    const maxDrawdown = item.MAX_DRAWDOWN || 0
+
+    return (
+      <Box key={symbol} p={4} borderWidth="1px" borderRadius="md">
+        <HStack justify="space-between" mb={2}>
+          <Text fontWeight="bold">{symbol}</Text>
+          <Badge colorScheme={
+            riskCategory === 'HIGH_RISK' ? 'red' : 
+            riskCategory === 'MEDIUM_RISK' ? 'yellow' : 
+            riskCategory === 'LOW_RISK' ? 'green' : 'gray'
+          }>
+            {riskCategory.replace(/_/g, ' ')}
+          </Badge>
+        </HStack>
+        <Grid templateColumns="repeat(3, 1fr)" gap={4}>
+          <Stat>
+            <StatLabel>Daily Volatility</StatLabel>
+            <StatNumber>{dailyVolatility.toFixed(2)}%</StatNumber>
+          </Stat>
+          <Stat>
+            <StatLabel>Sharpe Ratio</StatLabel>
+            <StatNumber>{sharpeRatio.toFixed(2)}</StatNumber>
+          </Stat>
+          <Stat>
+            <StatLabel>Value at Risk (95%)</StatLabel>
+            <StatNumber>{var95.toFixed(2)}%</StatNumber>
+          </Stat>
+          <Stat>
+            <StatLabel>Max 7D Return</StatLabel>
+            <StatNumber>
+              <StatArrow type="increase" />
+              {max7dReturn.toFixed(2)}%
+            </StatNumber>
+          </Stat>
+          <Stat>
+            <StatLabel>Min 7D Return</StatLabel>
+            <StatNumber>
+              <StatArrow type="decrease" />
+              {min7dReturn.toFixed(2)}%
+            </StatNumber>
+          </Stat>
+          <Stat>
+            <StatLabel>Max Drawdown</StatLabel>
+            <StatNumber>
+              <StatArrow type="decrease" />
+              {Math.abs(maxDrawdown).toFixed(2)}%
+            </StatNumber>
+          </Stat>
+        </Grid>
+      </Box>
+    )
+  }
 
   if (isLoading) {
     return (

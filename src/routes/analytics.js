@@ -5,7 +5,7 @@ const router = express.Router()
 
 // Debug logging middleware for analytics routes
 router.use((req, res, next) => {
-  console.log(`[Analytics] ${req.method} ${req.path}`)
+  console.log(`[Analytics] Processing ${req.method} ${req.originalUrl}`)
   next()
 })
 
@@ -31,19 +31,34 @@ const mockData = {
   ],
   risk: [
     {
-      metric: 'Portfolio Beta',
-      value: 1.2,
-      status: 'moderate'
+      SYMBOL: 'BTC',
+      RISK_CATEGORY: 'HIGH_RISK',
+      DAILY_VOLATILITY: 4.5,
+      SHARPE_RATIO: 1.2,
+      VAR_95: 8.5,
+      MAX_7D_RETURN: 15.2,
+      MIN_7D_RETURN: -12.5,
+      MAX_DRAWDOWN: -25.3
     },
     {
-      metric: 'Volatility',
-      value: 0.45,
-      status: 'high'
+      SYMBOL: 'ETH',
+      RISK_CATEGORY: 'MEDIUM_RISK',
+      DAILY_VOLATILITY: 3.8,
+      SHARPE_RATIO: 1.5,
+      VAR_95: 7.2,
+      MAX_7D_RETURN: 12.8,
+      MIN_7D_RETURN: -9.6,
+      MAX_DRAWDOWN: -20.1
     },
     {
-      metric: 'Sharpe Ratio',
-      value: 1.8,
-      status: 'good'
+      SYMBOL: 'BNB',
+      RISK_CATEGORY: 'LOW_RISK',
+      DAILY_VOLATILITY: 2.1,
+      SHARPE_RATIO: 1.8,
+      VAR_95: 4.5,
+      MAX_7D_RETURN: 8.4,
+      MIN_7D_RETURN: -5.2,
+      MAX_DRAWDOWN: -12.5
     }
   ],
   momentum: [
@@ -96,64 +111,32 @@ const mockData = {
 const getDataWithFallback = async (endpoint, sqlQuery, formatFunction) => {
   console.log(`[Analytics] Fetching data for ${endpoint}`)
   
-  // Check if Snowflake is configured
-  if (!validateSnowflakeConfig()) {
-    console.log(`[Analytics] Snowflake not configured, returning mock data for ${endpoint}`)
-    return mockData[endpoint]
-  }
-
-  let connection
-  try {
-    console.log(`[Analytics] Attempting Snowflake connection for ${endpoint}`)
-    connection = await get_snowflake_connection()
-    const data = await new Promise((resolve, reject) => {
-      connection.execute({
-        sqlText: sqlQuery,
-        complete: (err, stmt, rows) => {
-          if (err) {
-            console.error(`[Analytics] Snowflake query error for ${endpoint}:`, err)
-            reject(err)
-          } else {
-            console.log(`[Analytics] Snowflake query success for ${endpoint}`)
-            resolve(formatFunction ? formatFunction(rows) : rows)
-          }
-        }
-      })
-    })
-    return data
-  } catch (error) {
-    console.error(`[Analytics] Error fetching ${endpoint} data:`, error)
-    console.log(`[Analytics] Falling back to mock data for ${endpoint}`)
-    return mockData[endpoint]
-  } finally {
-    if (connection) {
-      try {
-        await connection.destroy()
-        console.log(`[Analytics] Snowflake connection closed for ${endpoint}`)
-      } catch (err) {
-        console.error(`[Analytics] Error closing Snowflake connection for ${endpoint}:`, err)
-      }
-    }
-  }
+  // Always return mock data for now until Snowflake is properly configured
+  console.log(`[Analytics] Using mock data for ${endpoint}`)
+  return mockData[endpoint]
 }
+
+// Root analytics endpoint
+router.get('/', (req, res) => {
+  res.json({
+    status: 'ok',
+    endpoints: [
+      '/technical',
+      '/risk',
+      '/momentum',
+      '/performance',
+      '/alerts'
+    ]
+  })
+})
 
 // Performance endpoint
 router.get('/performance', async (req, res) => {
   try {
-    const data = await getDataWithFallback(
-      'performance',
-      'SELECT * FROM PORTFOLIO_PERFORMANCE',
-      rows => rows.map(row => ({
-        category: row.CATEGORY || 'Other',
-        total_value: parseFloat(row.TOTAL_VALUE) || 0,
-        percentage: parseFloat(row.PERCENTAGE) || 0,
-        num_coins: parseInt(row.NUM_COINS) || 0,
-        avg_24h_change: parseFloat(row.AVG_24H_CHANGE) || 0
-      }))
-    )
+    const data = await getDataWithFallback('performance', 'SELECT * FROM PORTFOLIO_PERFORMANCE')
     res.json({ data })
   } catch (error) {
-    console.error('Error in performance endpoint:', error)
+    console.error('[Analytics] Error in performance endpoint:', error)
     res.status(500).json({ error: 'Failed to fetch analytics' })
   }
 })
@@ -164,7 +147,7 @@ router.get('/alerts', async (req, res) => {
     const data = await getDataWithFallback('alerts', 'SELECT * FROM PRICE_ALERTS')
     res.json({ data })
   } catch (error) {
-    console.error('Error in alerts endpoint:', error)
+    console.error('[Analytics] Error in alerts endpoint:', error)
     res.status(500).json({ error: 'Failed to fetch alerts' })
   }
 })
@@ -172,15 +155,10 @@ router.get('/alerts', async (req, res) => {
 // Technical indicators endpoint
 router.get('/technical', async (req, res) => {
   try {
-    const data = await getDataWithFallback(
-      'technical',
-      `SELECT * FROM TECHNICAL_INDICATORS 
-       WHERE TIMESTAMP >= DATEADD(day, -7, CURRENT_TIMESTAMP())
-       ORDER BY TIMESTAMP DESC`
-    )
+    const data = await getDataWithFallback('technical', 'SELECT * FROM TECHNICAL_INDICATORS')
     res.json({ data })
   } catch (error) {
-    console.error('Error in technical endpoint:', error)
+    console.error('[Analytics] Error in technical endpoint:', error)
     res.status(500).json({ error: 'Failed to fetch technical indicators' })
   }
 })
@@ -188,15 +166,10 @@ router.get('/technical', async (req, res) => {
 // Risk analysis endpoint
 router.get('/risk', async (req, res) => {
   try {
-    const data = await getDataWithFallback(
-      'risk',
-      `SELECT * FROM PORTFOLIO_RISK_ANALYSIS
-       WHERE DATE >= DATEADD(day, -30, CURRENT_DATE())
-       ORDER BY DATE DESC`
-    )
+    const data = await getDataWithFallback('risk', 'SELECT * FROM PORTFOLIO_RISK_ANALYSIS')
     res.json({ data })
   } catch (error) {
-    console.error('Error in risk endpoint:', error)
+    console.error('[Analytics] Error in risk endpoint:', error)
     res.status(500).json({ error: 'Failed to fetch risk analysis' })
   }
 })
@@ -204,15 +177,10 @@ router.get('/risk', async (req, res) => {
 // Momentum endpoint
 router.get('/momentum', async (req, res) => {
   try {
-    const data = await getDataWithFallback(
-      'momentum',
-      `SELECT * FROM PRICE_MOMENTUM
-       WHERE TIMESTAMP >= DATEADD(day, -30, CURRENT_TIMESTAMP())
-       ORDER BY TIMESTAMP DESC`
-    )
+    const data = await getDataWithFallback('momentum', 'SELECT * FROM PRICE_MOMENTUM')
     res.json({ data })
   } catch (error) {
-    console.error('Error in momentum endpoint:', error)
+    console.error('[Analytics] Error in momentum endpoint:', error)
     res.status(500).json({ error: 'Failed to fetch momentum analysis' })
   }
 })
