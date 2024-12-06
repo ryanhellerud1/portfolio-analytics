@@ -12,6 +12,16 @@ router.use((req, res, next) => {
   next()
 })
 
+// Error handling middleware specific to analytics routes
+router.use((err, req, res, next) => {
+  console.error('[Analytics] Error:', err)
+  res.status(500).json({
+    error: 'Analytics error',
+    message: err.message,
+    details: process.env.NODE_ENV === 'development' ? err.stack : undefined
+  })
+})
+
 // Helper function to get Snowflake connection
 const getSnowflakeConnection = () => {
   return new Promise((resolve, reject) => {
@@ -27,10 +37,10 @@ const getSnowflakeConnection = () => {
 
     connection.connect((err, conn) => {
       if (err) {
-        console.error('Failed to connect to Snowflake:', err)
+        console.error('[Analytics] Failed to connect to Snowflake:', err)
         reject(err)
       } else {
-        console.log('Successfully connected to Snowflake')
+        console.log('[Analytics] Successfully connected to Snowflake')
         resolve(conn)
       }
     })
@@ -39,25 +49,31 @@ const getSnowflakeConnection = () => {
 
 // Helper function to execute Snowflake query
 const executeSnowflakeQuery = async (query) => {
-  const connection = await getSnowflakeConnection()
-  return new Promise((resolve, reject) => {
-    connection.execute({
-      sqlText: query,
-      complete: (err, stmt, rows) => {
-        connection.destroy((destroyErr) => {
-          if (destroyErr) {
-            console.error('Error destroying connection:', destroyErr)
+  let connection
+  try {
+    connection = await getSnowflakeConnection()
+    return new Promise((resolve, reject) => {
+      connection.execute({
+        sqlText: query,
+        complete: (err, stmt, rows) => {
+          if (err) {
+            reject(err)
+          } else {
+            resolve(rows || [])
           }
-        })
-        
-        if (err) {
-          reject(err)
-        } else {
-          resolve(rows)
         }
-      }
+      })
     })
-  })
+  } catch (error) {
+    console.error('[Analytics] Query execution error:', error)
+    throw error
+  } finally {
+    if (connection) {
+      connection.destroy((err) => {
+        if (err) console.error('[Analytics] Error destroying connection:', err)
+      })
+    }
+  }
 }
 
 // Helper function to handle Snowflake or return mock data
@@ -229,16 +245,16 @@ router.get('/performance', async (req, res) => {
       GROUP BY h.CATEGORY
       `,
       (rows) => rows.map(row => ({
-        category: row.CATEGORY,
-        total_value: row.TOTAL_VALUE,
-        num_coins: row.NUM_COINS,
-        avg_24h_change: row.AVG_24H_CHANGE
+        category: row.CATEGORY || 'Other',
+        total_value: Number(row.TOTAL_VALUE) || 0,
+        num_coins: Number(row.NUM_COINS) || 0,
+        avg_24h_change: Number(row.AVG_24H_CHANGE) || 0
       }))
     )
     res.json({ data })
   } catch (error) {
     console.error('[Analytics] Error in performance endpoint:', error)
-    res.status(500).json({ error: 'Failed to fetch analytics' })
+    res.status(500).json({ error: 'Failed to fetch analytics', message: error.message })
   }
 })
 

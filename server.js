@@ -20,7 +20,7 @@ const { PythonShell } = pkg
 
 const app = express()
 
-// CORS configuration
+// Add CORS configuration
 const corsOptions = {
   origin: '*',
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
@@ -44,9 +44,10 @@ app.use((req, res, next) => {
   next()
 })
 
+// Parse JSON bodies
 app.use(express.json())
 
-// Add request logging with more details
+// Add request logging
 app.use((req, res, next) => {
   const start = Date.now()
   res.on('finish', () => {
@@ -55,6 +56,9 @@ app.use((req, res, next) => {
   })
   next()
 })
+
+// Mount analytics routes
+app.use('/api/analytics', analyticsRoutes)
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -125,9 +129,6 @@ coingeckoApi.interceptors.request.use(request => {
   })
   return request
 })
-
-// Mount analytics routes first (before other routes)
-app.use('/api/analytics', analyticsRoutes)
 
 // Price endpoint
 app.get('/api/prices', async (req, res) => {
@@ -319,6 +320,7 @@ app.use((err, req, res, next) => {
     timestamp: new Date().toISOString()
   })
   
+  // Ensure we send a JSON response
   res.status(err.status || 500).json({
     error: process.env.NODE_ENV === 'production' ? 'Internal Server Error' : err.message,
     status: err.status || 500,
@@ -326,7 +328,7 @@ app.use((err, req, res, next) => {
   })
 })
 
-// 404 handler
+// 404 handler - ensure JSON response
 app.use((req, res) => {
   console.log('404 Not Found:', {
     path: req.path,
