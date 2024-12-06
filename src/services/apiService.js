@@ -12,39 +12,50 @@ const defaultHeaders = {
 
 const defaultOptions = {
   headers: defaultHeaders,
-  mode: 'cors'
+  mode: 'cors',
+  cache: 'no-cache'
 }
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
 
 const fetchWithRetry = async (url, options, retries = 3, backoff = 1000) => {
-  try {
-    const response = await fetch(url, options)
-    
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error('API Error Response:', {
-        status: response.status,
-        statusText: response.statusText,
-        body: errorText
-      })
+  for (let i = 0; i < retries; i++) {
+    try {
+      const response = await fetch(url, options)
       
-      throw new Error(`HTTP error! status: ${response.status}`)
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('API Error Response:', {
+          status: response.status,
+          statusText: response.statusText,
+          body: errorText,
+          attempt: i + 1
+        })
+        
+        if (response.status === 0 || response.status === 429 || response.status >= 500) {
+          throw new Error(`Retryable error: ${response.status}`)
+        }
+        
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
+      const contentType = response.headers.get('content-type')
+      if (!contentType || !contentType.includes('application/json')) {
+        console.error('Invalid content type:', contentType)
+        throw new Error('Response is not JSON')
+      }
+      
+      return await response.json()
+    } catch (error) {
+      console.error(`Attempt ${i + 1} failed:`, error)
+      
+      if (i === retries - 1) {
+        throw error
+      }
+      
+      console.log(`Retrying... ${retries - i - 1} attempts left`)
+      await delay(backoff * Math.pow(2, i))
     }
-    
-    const contentType = response.headers.get('content-type')
-    if (!contentType || !contentType.includes('application/json')) {
-      throw new Error('Response is not JSON')
-    }
-    
-    return await response.json()
-  } catch (error) {
-    if (retries > 0) {
-      console.log(`Retrying... ${retries} attempts left`)
-      await delay(backoff)
-      return fetchWithRetry(url, options, retries - 1, backoff * 2)
-    }
-    throw error
   }
 }
 

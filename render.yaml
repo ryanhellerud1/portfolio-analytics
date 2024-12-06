@@ -17,6 +17,8 @@ services:
         value: CG-DEMO-KEY
       - key: CORS_ORIGIN
         value: https://portfolio-metrics.netlify.app
+      - key: CORS_ENABLED
+        value: "true"
       - key: SNOWFLAKE_ACCOUNT
         sync: false
       - key: SNOWFLAKE_USERNAME
@@ -32,4 +34,17 @@ services:
       - key: SNOWFLAKE_REGION
         sync: false
     healthCheckPath: /health
-    autoDeploy: true 
+    autoDeploy: true
+    headers:
+      - path: /*
+        name: Access-Control-Allow-Origin
+        value: https://portfolio-metrics.netlify.app
+      - path: /*
+        name: Access-Control-Allow-Methods
+        value: GET,POST,PUT,DELETE,OPTIONS
+      - path: /*
+        name: Access-Control-Allow-Headers
+        value: Content-Type,Authorization,Accept
+      - path: /*
+        name: Access-Control-Max-Age
+        value: "86400" 

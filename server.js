@@ -20,14 +20,19 @@ const { PythonShell } = pkg
 const app = express()
 
 // CORS configuration
-const corsOptions = {
+app.use(cors({
   origin: ['https://portfolio-metrics.netlify.app', 'http://localhost:5173'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  optionsSuccessStatus: 200
-}
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  credentials: false,
+  maxAge: 86400, // 24 hours
+  preflightContinue: false,
+  optionsSuccessStatus: 204
+}))
 
-app.use(cors(corsOptions))
+// Handle preflight requests
+app.options('*', cors())
+
 app.use(express.json())
 
 // Add request logging with more details
