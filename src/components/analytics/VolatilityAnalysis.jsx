@@ -38,9 +38,10 @@ export default function VolatilityAnalysis() {
     try {
       setIsLoading(true)
       setError(null)
-      const data = await analyticsApi.getRiskAnalysis()
-      if (!data.data) throw new Error('No data received')
-      setVolatilityData(data.data)
+      const response = await analyticsApi.getRiskAnalysis()
+      console.log('Risk analysis response:', response)
+      if (!response?.data) throw new Error('No data received')
+      setVolatilityData(response.data)
     } catch (error) {
       console.error('Error fetching volatility data:', error)
       setError(error.message || 'Failed to fetch volatility data')

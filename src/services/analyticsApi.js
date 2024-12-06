@@ -5,7 +5,7 @@ export const analyticsApi = {
     return apiService.getTechnicalIndicators()
   },
 
-  getVolatilityAnalysis: async () => {
+  getRiskAnalysis: async () => {
     return apiService.getRiskAnalysis()
   },
 
