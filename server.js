@@ -27,7 +27,8 @@ const corsOptions = {
   preflightContinue: false,
   optionsSuccessStatus: 204,
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With'],
-  credentials: false
+  credentials: false,
+  exposedHeaders: ['Content-Type']
 }
 
 // Add request logging
@@ -44,6 +45,10 @@ app.use((req, res, next) => {
   const originalJson = res.json
   res.json = function(data) {
     console.log(`Response data:`, data)
+    if (data && data.error) {
+      console.error('Response error:', data.error)
+      if (data.stack) console.error('Stack:', data.stack)
+    }
     return originalJson.apply(this, arguments)
   }
   
@@ -51,6 +56,14 @@ app.use((req, res, next) => {
     const duration = Date.now() - start
     console.log(`\n====== Request Complete ======`)
     console.log(`${req.method} ${req.url} - ${res.statusCode} (${duration}ms)`)
+    if (res.statusCode >= 400) {
+      console.error('Error response:', {
+        status: res.statusCode,
+        method: req.method,
+        url: req.url,
+        duration: duration
+      })
+    }
   })
   
   next()
@@ -67,6 +80,7 @@ app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*')
   res.header('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS')
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, Origin, X-Requested-With')
+  res.header('Content-Type', 'application/json')
   next()
 })
 

@@ -16,8 +16,25 @@ router.use((req, res, next) => {
   const originalJson = res.json
   res.json = function(data) {
     console.log(`[Analytics] Response data:`, data)
+    if (data && data.error) {
+      console.error('[Analytics] Response error:', data.error)
+      if (data.stack) console.error('[Analytics] Stack:', data.stack)
+    }
     return originalJson.apply(this, arguments)
   }
+  
+  // Log response completion
+  res.on('finish', () => {
+    console.log(`[Analytics] ====== Response Complete ======`)
+    console.log(`[Analytics] ${req.method} ${req.originalUrl} - ${res.statusCode}`)
+    if (res.statusCode >= 400) {
+      console.error('[Analytics] Error response:', {
+        status: res.statusCode,
+        method: req.method,
+        url: req.originalUrl
+      })
+    }
+  })
   
   next()
 })
@@ -27,12 +44,20 @@ router.use((err, req, res, next) => {
   console.error(`[Analytics] ====== Error Handler ======`)
   console.error(`[Analytics] Error:`, err)
   console.error(`[Analytics] Stack:`, err.stack)
+  console.error(`[Analytics] Request details:`, {
+    method: req.method,
+    url: req.url,
+    headers: req.headers,
+    query: req.query,
+    body: req.body
+  })
   
   // Ensure proper JSON response
   res.status(500).json({
-    error: 'Analytics error',
+    error: process.env.NODE_ENV === 'production' ? 'Analytics error' : err.message,
     message: err.message,
-    details: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    details: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+    path: req.path
   })
 })
 
@@ -112,7 +137,7 @@ const getDataWithFallback = async (endpoint, sqlQuery, formatFunction = (data) =
   try {
     if (!validateSnowflakeConfig()) {
       console.log(`[Analytics] ❌ Snowflake not configured, using mock data for ${endpoint}`)
-      return mockData[endpoint]
+      return { data: mockData[endpoint] }
     }
 
     console.log(`[Analytics] 🔍 Executing query for ${endpoint}:`, sqlQuery)
@@ -121,17 +146,17 @@ const getDataWithFallback = async (endpoint, sqlQuery, formatFunction = (data) =
 
     if (!rows || rows.length === 0) {
       console.log(`[Analytics] ⚠️ No data found for ${endpoint}, using mock data`)
-      return mockData[endpoint]
+      return { data: mockData[endpoint] }
     }
 
     console.log(`[Analytics] 🔄 Transforming data for ${endpoint}`)
     const transformedData = formatFunction(rows)
     console.log(`[Analytics] ✅ Data ready for ${endpoint}:`, transformedData)
-    return transformedData
+    return { data: transformedData }
   } catch (error) {
     console.error(`[Analytics] ❌ Error fetching data for ${endpoint}:`, error)
     console.log(`[Analytics] ⚠️ Falling back to mock data for ${endpoint}`)
-    return mockData[endpoint]
+    return { data: mockData[endpoint] }
   }
 }
 
@@ -144,7 +169,8 @@ const mockData = {
       macd: 245.67,
       sma_20: 43250.45,
       ema_50: 42980.34,
-      signal: 'buy'
+      signal: 'buy',
+      price_change: 2.5
     },
     {
       coin: 'ETH',
@@ -152,7 +178,8 @@ const mockData = {
       macd: 78.45,
       sma_20: 2280.12,
       ema_50: 2245.78,
-      signal: 'hold'
+      signal: 'hold',
+      price_change: -1.2
     }
   ],
   risk: [
@@ -160,31 +187,28 @@ const mockData = {
       SYMBOL: 'BTC',
       RISK_CATEGORY: 'HIGH_RISK',
       DAILY_VOLATILITY: 4.5,
-      SHARPE_RATIO: 1.2,
-      VAR_95: 8.5,
+      VOLUME_TO_MCAP_RATIO: 0.0123,
       MAX_7D_RETURN: 15.2,
       MIN_7D_RETURN: -12.5,
-      MAX_DRAWDOWN: -25.3
+      MAX_DRAWDOWN: 25.3
     },
     {
       SYMBOL: 'ETH',
       RISK_CATEGORY: 'MEDIUM_RISK',
       DAILY_VOLATILITY: 3.8,
-      SHARPE_RATIO: 1.5,
-      VAR_95: 7.2,
+      VOLUME_TO_MCAP_RATIO: 0.0098,
       MAX_7D_RETURN: 12.8,
       MIN_7D_RETURN: -9.6,
-      MAX_DRAWDOWN: -20.1
+      MAX_DRAWDOWN: 20.1
     },
     {
       SYMBOL: 'BNB',
       RISK_CATEGORY: 'LOW_RISK',
       DAILY_VOLATILITY: 2.1,
-      SHARPE_RATIO: 1.8,
-      VAR_95: 4.5,
+      VOLUME_TO_MCAP_RATIO: 0.0076,
       MAX_7D_RETURN: 8.4,
       MIN_7D_RETURN: -5.2,
-      MAX_DRAWDOWN: -12.5
+      MAX_DRAWDOWN: 12.5
     }
   ],
   momentum: [
@@ -205,14 +229,12 @@ const mockData = {
     {
       category: 'Large Cap',
       total_value: 1250000,
-      percentage: 45.5,
       num_coins: 3,
       avg_24h_change: 2.8
     },
     {
       category: 'Mid Cap',
       total_value: 750000,
-      percentage: 27.3,
       num_coins: 5,
       avg_24h_change: 3.2
     }
@@ -263,7 +285,7 @@ router.get('/performance', async (req, res) => {
   console.log(`[Analytics] ====== Performance Endpoint ======`)
   try {
     console.log(`[Analytics] Fetching performance data...`)
-    const data = await getDataWithFallback(
+    const result = await getDataWithFallback(
       'performance',
       `
       SELECT 
@@ -282,8 +304,8 @@ router.get('/performance', async (req, res) => {
         avg_24h_change: Number(row.AVG_24H_CHANGE) || 0
       }))
     )
-    console.log(`[Analytics] Performance data fetched successfully:`, data)
-    res.json({ data })
+    console.log(`[Analytics] Performance data fetched successfully:`, result)
+    res.json(result)
   } catch (error) {
     console.error(`[Analytics] Performance endpoint error:`, error)
     res.status(500).json({ 
@@ -297,7 +319,7 @@ router.get('/performance', async (req, res) => {
 // Alerts endpoint
 router.get('/alerts', async (req, res) => {
   try {
-    const data = await getDataWithFallback(
+    const result = await getDataWithFallback(
       'alerts',
       `
       SELECT 
@@ -319,17 +341,21 @@ router.get('/alerts', async (req, res) => {
         severity: row.SEVERITY
       }))
     )
-    res.json({ data })
+    res.json(result)
   } catch (error) {
     console.error('[Analytics] Error in alerts endpoint:', error)
-    res.status(500).json({ error: 'Failed to fetch alerts' })
+    res.status(500).json({ 
+      error: 'Failed to fetch alerts',
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    })
   }
 })
 
 // Technical indicators endpoint
 router.get('/technical', async (req, res) => {
   try {
-    const data = await getDataWithFallback(
+    const result = await getDataWithFallback(
       'technical',
       `
       SELECT 
@@ -356,10 +382,14 @@ router.get('/technical', async (req, res) => {
         macd: calculateMACD(row.PRICE_USD, row.PRICE_20D_AGO || row.PRICE_USD)
       }))
     )
-    res.json({ data })
+    res.json(result)
   } catch (error) {
     console.error('[Analytics] Error in technical endpoint:', error)
-    res.status(500).json({ error: 'Failed to fetch technical indicators' })
+    res.status(500).json({ 
+      error: 'Failed to fetch technical indicators',
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    })
   }
 })
 
@@ -380,7 +410,7 @@ const calculateMACD = (currentPrice, oldPrice) => {
 // Risk analysis endpoint
 router.get('/risk', async (req, res) => {
   try {
-    const data = await getDataWithFallback(
+    const result = await getDataWithFallback(
       'risk',
       `
       WITH price_stats AS (
@@ -440,17 +470,21 @@ router.get('/risk', async (req, res) => {
         MAX_DRAWDOWN: parseFloat(row.MAX_DRAWDOWN || 0).toFixed(2)
       }))
     )
-    res.json({ data })
+    res.json(result)
   } catch (error) {
     console.error('[Analytics] Error in risk endpoint:', error)
-    res.status(500).json({ error: 'Failed to fetch risk analytics' })
+    res.status(500).json({ 
+      error: 'Failed to fetch risk analytics',
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    })
   }
 })
 
 // Momentum endpoint
 router.get('/momentum', async (req, res) => {
   try {
-    const data = await getDataWithFallback(
+    const result = await getDataWithFallback(
       'momentum',
       `
       WITH price_momentum AS (
@@ -494,10 +528,14 @@ router.get('/momentum', async (req, res) => {
         strength: row.STRENGTH
       }))
     )
-    res.json({ data })
+    res.json(result)
   } catch (error) {
     console.error('[Analytics] Error in momentum endpoint:', error)
-    res.status(500).json({ error: 'Failed to fetch momentum data' })
+    res.status(500).json({ 
+      error: 'Failed to fetch momentum data',
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    })
   }
 })
 
