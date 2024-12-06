@@ -300,7 +300,7 @@ app.post('/api/sync-snowflake', async (req, res) => {
 
     // Check if Python path is configured
     console.log('\n=== Checking Python Configuration ===')
-    const pythonPath = 'python3'
+    const pythonPath = process.env.PYTHON_PATH || 'python3'
     console.log('✅ Python path configured:', pythonPath)
 
     // Check if script exists
@@ -339,7 +339,7 @@ app.post('/api/sync-snowflake', async (req, res) => {
       args: [JSON.stringify({ holdings, prices })],
       env: {
         ...process.env,
-        PYTHONPATH: process.env.PYTHONPATH || '/opt/venv/lib/python3/site-packages:/usr/local/lib/python3/site-packages'
+        PYTHONPATH: process.env.PYTHONPATH || '/usr/local/lib/python3/site-packages'
       }
     }
 
@@ -347,8 +347,24 @@ app.post('/api/sync-snowflake', async (req, res) => {
     console.log('Python environment:', {
       PYTHONPATH: options.env.PYTHONPATH,
       scriptPath: options.scriptPath,
-      pythonPath: options.pythonPath
+      pythonPath: options.pythonPath,
+      PATH: process.env.PATH
     })
+
+    // Verify Python installation before running script
+    try {
+      const { execSync } = require('child_process')
+      const pythonVersion = execSync(`${pythonPath} --version`).toString()
+      console.log('Python version:', pythonVersion)
+      
+      const pythonPath = execSync(`which ${pythonPath}`).toString()
+      console.log('Python location:', pythonPath)
+      
+      const sitePackages = execSync(`${pythonPath} -c "import site; print(site.getsitepackages())"`).toString()
+      console.log('Python site-packages:', sitePackages)
+    } catch (error) {
+      console.error('Failed to verify Python installation:', error)
+    }
 
     console.log('\n=== Running Python Script ===')
     console.log('Options:', {
