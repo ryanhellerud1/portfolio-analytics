@@ -15,10 +15,10 @@ services:
         value: https://api.coingecko.com/api/v3
       - key: COINGECKO_API_KEY
         value: CG-DEMO-KEY
-      - key: CORS_ORIGIN
-        value: https://portfolio-metrics.netlify.app
       - key: CORS_ENABLED
         value: "true"
+      - key: ALLOWED_ORIGINS
+        value: "https://portfolio-metrics.netlify.app,https://main--portfolio-metrics.netlify.app,http://localhost:5173"
       - key: SNOWFLAKE_ACCOUNT
         sync: false
       - key: SNOWFLAKE_USERNAME
@@ -38,7 +38,7 @@ services:
     headers:
       - path: /*
         name: Access-Control-Allow-Origin
-        value: https://portfolio-metrics.netlify.app
+        value: "*"
       - path: /*
         name: Access-Control-Allow-Methods
         value: GET,POST,PUT,DELETE,OPTIONS

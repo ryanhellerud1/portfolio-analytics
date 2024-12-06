@@ -20,14 +20,27 @@ const { PythonShell } = pkg
 const app = express()
 
 // CORS configuration
+const allowedOrigins = [
+  'https://portfolio-metrics.netlify.app',
+  'https://main--portfolio-metrics.netlify.app',
+  'http://localhost:5173'
+]
+
 app.use(cors({
-  origin: ['https://portfolio-metrics.netlify.app', 'http://localhost:5173'],
+  origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true)
+    
+    if (allowedOrigins.indexOf(origin) === -1) {
+      console.log('Blocked origin:', origin)
+      return callback(null, false)
+    }
+    return callback(null, true)
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
   credentials: false,
-  maxAge: 86400, // 24 hours
-  preflightContinue: false,
-  optionsSuccessStatus: 204
+  maxAge: 86400
 }))
 
 // Handle preflight requests
