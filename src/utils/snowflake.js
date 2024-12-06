@@ -5,15 +5,27 @@ export const get_snowflake_connection = () => {
     try {
       const account = process.env.SNOWFLAKE_ACCOUNT
       const region = process.env.SNOWFLAKE_REGION
-      const account_identifier = `${account}.${region}`
+      
+      // Format account identifier correctly for Snowflake
+      const account_identifier = account.includes('.') ? account : `${account}.${region}`
+      
+      console.log('Connecting to Snowflake with:', {
+        account: account_identifier,
+        region,
+        warehouse: process.env.SNOWFLAKE_WAREHOUSE,
+        database: process.env.SNOWFLAKE_DATABASE,
+        schema: process.env.SNOWFLAKE_SCHEMA || 'PUBLIC',
+        role: process.env.SNOWFLAKE_ROLE
+      })
       
       const connection = snowflake.createConnection({
-        account: account_identifier,
+        account: account,  // Use just the account name
+        region: region,    // Specify region separately
         username: process.env.SNOWFLAKE_USERNAME,
         password: process.env.SNOWFLAKE_PASSWORD,
         warehouse: process.env.SNOWFLAKE_WAREHOUSE,
         database: process.env.SNOWFLAKE_DATABASE,
-        schema: process.env.SNOWFLAKE_SCHEMA,
+        schema: process.env.SNOWFLAKE_SCHEMA || 'PUBLIC',
         role: process.env.SNOWFLAKE_ROLE
       })
 
@@ -40,14 +52,24 @@ export const validateSnowflakeConfig = () => {
     'SNOWFLAKE_PASSWORD',
     'SNOWFLAKE_DATABASE',
     'SNOWFLAKE_WAREHOUSE',
-    'SNOWFLAKE_ROLE'
+    'SNOWFLAKE_ROLE',
+    'SNOWFLAKE_REGION'
   ]
 
   const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName])
   if (missingEnvVars.length > 0) {
-    console.warn('Missing some Snowflake environment variables:', missingEnvVars)
-    console.warn('Some features might not work without Snowflake configuration')
+    console.warn('Missing Snowflake environment variables:', missingEnvVars)
     return false
   }
+
+  // Additional validation for account and region format
+  const account = process.env.SNOWFLAKE_ACCOUNT
+  const region = process.env.SNOWFLAKE_REGION
+  
+  if (!account || !region) {
+    console.warn('Invalid Snowflake account or region format')
+    return false
+  }
+
   return true
 } 
