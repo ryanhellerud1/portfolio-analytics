@@ -18,65 +18,62 @@ const defaultOptions = {
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
 
-const fetchWithRetry = async (url, options, retries = 3, backoff = 1000) => {
-  for (let i = 0; i < retries; i++) {
-    try {
-      const response = await fetch(url, options)
-      
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error('API Error Response:', {
-          status: response.status,
-          statusText: response.statusText,
-          body: errorText,
-          attempt: i + 1
-        })
-        
-        if (response.status === 0 || response.status === 429 || response.status >= 500) {
-          throw new Error(`Retryable error: ${response.status}`)
-        }
-        
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-      
-      const contentType = response.headers.get('content-type')
-      if (!contentType || !contentType.includes('application/json')) {
-        console.error('Invalid content type:', contentType)
-        throw new Error('Response is not JSON')
-      }
-      
-      return await response.json()
-    } catch (error) {
-      console.error(`Attempt ${i + 1} failed:`, error)
-      
-      if (i === retries - 1) {
-        throw error
-      }
-      
-      console.log(`Retrying... ${retries - i - 1} attempts left`)
-      await delay(backoff * Math.pow(2, i))
-    }
-  }
+const isJsonResponse = (contentType) => {
+  return contentType && (
+    contentType.includes('application/json') ||
+    contentType.includes('application/javascript')
+  )
 }
 
-const handleResponse = async (response) => {
-  try {
-    console.log('API Response:', {
-      url: response.url,
-      status: response.status,
-      statusText: response.statusText
-    })
-    
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
+const parseResponse = async (response) => {
+  const contentType = response.headers.get('content-type')
+  
+  if (!response.ok) {
+    let errorMessage = `HTTP error! status: ${response.status}`
+    try {
+      if (isJsonResponse(contentType)) {
+        const errorData = await response.json()
+        errorMessage = errorData.error || errorData.message || errorMessage
+      } else {
+        const text = await response.text()
+        console.error('Non-JSON error response:', text)
+      }
+    } catch (e) {
+      console.error('Error parsing error response:', e)
     }
-    
-    const data = await response.json()
-    return data
-  } catch (error) {
-    console.error('API Error:', error)
-    throw error
+    throw new Error(errorMessage)
   }
+  
+  if (!isJsonResponse(contentType)) {
+    const text = await response.text()
+    console.error('Unexpected response type:', contentType, text)
+    throw new Error('Response is not JSON')
+  }
+  
+  return response.json()
+}
+
+const fetchWithRetry = async (url, options, retries = 3, backoff = 1000) => {
+  let lastError
+  
+  for (let i = 0; i < retries; i++) {
+    try {
+      console.log(`Attempt ${i + 1} for ${url}`)
+      const response = await fetch(url, options)
+      return await parseResponse(response)
+    } catch (error) {
+      console.error(`Attempt ${i + 1} failed:`, error)
+      lastError = error
+      
+      if (i < retries - 1) {
+        const delay = backoff * Math.pow(2, i)
+        console.log(`Retrying in ${delay}ms... ${retries - i - 1} attempts left`)
+        await new Promise(resolve => setTimeout(resolve, delay))
+      }
+    }
+  }
+  
+  throw lastError
 }
 
 export const apiService = {
@@ -120,7 +117,6 @@ export const apiService = {
     }
   },
 
-  // Analytics endpoints
   getPerformance: async () => {
     try {
       return await fetchWithRetry(
