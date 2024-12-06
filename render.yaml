@@ -2,10 +2,63 @@ services:
   - type: web
     name: crypto-tracker-api
     env: node
+    rootDir: crypto-tracker
     buildCommand: |
+      # Install Python and dependencies
+      apt-get update && apt-get install -y python3 python3-pip python3-venv
+      
+      # Create and activate virtual environment
+      python3 -m venv venv
+      . venv/bin/activate
+      
+      # Verify Python installation
+      which python3
+      python3 --version
+      
+      # Install Python packages
+      pip install --upgrade pip
+      pip install snowflake-connector-python python-dotenv
+      
+      # Verify Python packages
+      pip list
+      
+      # Create scripts directory and copy Python scripts
+      mkdir -p scripts
+      cp -rv ./scripts/* ./scripts/
+      
+      # Make Python script executable
+      chmod +x ./scripts/snowflake_sync.py
+      
+      # Create a wrapper script to ensure correct Python path
+      echo '#!/bin/bash' > run_python.sh
+      echo 'source ./venv/bin/activate' >> run_python.sh
+      echo 'exec python3 "$@"' >> run_python.sh
+      chmod +x run_python.sh
+      
+      # Install Node dependencies
       npm install
-      npm run build
-    startCommand: node server.js
+    startCommand: |
+      echo "=== Deployment Configuration ==="
+      echo "Current directory: $(pwd)"
+      
+      # Activate Python virtual environment
+      . venv/bin/activate
+      
+      # Verify Python setup
+      echo "Python location: $(which python3)"
+      echo "Python version: $(python3 --version)"
+      echo "Pip packages:"
+      pip list
+      
+      # Verify scripts
+      echo "Contents of scripts directory:"
+      ls -la ./scripts/
+      
+      # Test Python script execution
+      ./run_python.sh -c "import snowflake.connector; print('Snowflake package available')"
+      
+      echo "=== Starting Server ==="
+      PYTHON_PATH="./run_python.sh" node server.js
     envVars:
       - key: NODE_ENV
         value: production
@@ -13,26 +66,20 @@ services:
         value: 3001
       - key: COINGECKO_API_URL
         value: https://api.coingecko.com/api/v3
-      - key: COINGECKO_API_KEY
-        value: CG-DEMO-KEY
-      - key: CORS_ENABLED
-        value: "true"
-      - key: SNOWFLAKE_ACCOUNT
-        sync: false
-      - key: SNOWFLAKE_USERNAME
-        sync: false
-      - key: SNOWFLAKE_PASSWORD
-        sync: false
-      - key: SNOWFLAKE_DATABASE
-        sync: false
-      - key: SNOWFLAKE_WAREHOUSE
-        sync: false
-      - key: SNOWFLAKE_ROLE
-        sync: false
+      - key: PYTHON_PATH
+        value: ./run_python.sh
+      - key: PYTHONPATH
+        value: ./venv/lib/python3.9/site-packages
       - key: SNOWFLAKE_REGION
-        sync: false
+        value: us-west-2
+      - key: SNOWFLAKE_SCHEMA
+        value: PUBLIC
     healthCheckPath: /health
+    healthCheckTimeout: 100
     autoDeploy: true
+    numInstances: 1
+    regions:
+      - oregon
     headers:
       - path: /*
         name: Access-Control-Allow-Origin

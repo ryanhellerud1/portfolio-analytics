@@ -13,21 +13,6 @@ import fs from 'fs'
 // Configure dotenv at the start
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
-
-// Try to load Python environment variables
-try {
-  const pythonEnv = fs.readFileSync(path.join(__dirname, '.env.python'), 'utf8')
-  pythonEnv.split('\n').forEach(line => {
-    const [key, value] = line.split('=')
-    if (key && value) {
-      process.env[key.trim().replace('export ', '')] = value.trim()
-    }
-  })
-} catch (error) {
-  console.warn('Could not load Python environment variables:', error.message)
-}
-
-// Load main environment variables
 dotenv.config({ path: path.join(__dirname, '.env') })
 
 // Set up file paths
@@ -275,7 +260,7 @@ app.post('/api/sync-snowflake', async (req, res) => {
     const { holdings, prices } = req.body
     
     if (!holdings || !prices) {
-      console.log('��� Missing required data')
+      console.log('❌ Missing required data')
       return res.status(400).json({ 
         error: 'Missing required data',
         details: 'Both holdings and prices are required'
@@ -315,7 +300,7 @@ app.post('/api/sync-snowflake', async (req, res) => {
 
     // Check if Python path is configured
     console.log('\n=== Checking Python Configuration ===')
-    const pythonPath = process.env.PYTHON_PATH || '/opt/render/project/src/venv/bin/python3'
+    const pythonPath = process.env.PYTHON_PATH || './run_python.sh'
     if (!pythonPath) {
       console.error('❌ Python path not configured')
       return res.status(500).json({
