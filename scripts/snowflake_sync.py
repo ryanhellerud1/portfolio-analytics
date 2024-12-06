@@ -1,6 +1,17 @@
-import snowflake.connector
 import os
 import sys
+print("=== Python Environment Debug ===")
+print(f"Python version: {sys.version}")
+print(f"Python executable: {sys.executable}")
+print(f"Python path: {sys.path}")
+print(f"Current working directory: {os.getcwd()}")
+print(f"Environment variables:")
+for key, value in os.environ.items():
+    if key.startswith(('PYTHON', 'VIRTUAL', 'PATH')):
+        print(f"  {key}: {value}")
+print("===========================")
+
+import snowflake.connector
 import json
 import traceback
 from datetime import datetime
