@@ -175,5 +175,23 @@ export const apiService = {
       console.error('Error fetching momentum analysis:', error)
       return { data: [] }
     }
+  },
+
+  syncSnowflake: async (holdings, prices) => {
+    try {
+      const response = await fetchWithRetry(
+        `${API_BASE}/api/sync-snowflake`,
+        {
+          ...defaultOptions,
+          method: 'POST',
+          body: JSON.stringify({ holdings, prices })
+        }
+      )
+      console.log('Sync response:', response)
+      return response
+    } catch (error) {
+      console.error('Error syncing with Snowflake:', error)
+      throw error
+    }
   }
 } 
