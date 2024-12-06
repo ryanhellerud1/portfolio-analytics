@@ -332,16 +332,16 @@ app.post('/api/sync-snowflake', async (req, res) => {
 
     const options = {
       mode: 'text',
-      pythonPath: '/opt/render/project/src/.venv/bin/python3',
+      pythonPath: '/opt/venv/bin/python3',
       pythonOptions: ['-u'],
       scriptPath: path.join(__dirname, 'scripts'),
       args: [JSON.stringify({ holdings, prices })],
       env: {
         ...process.env,
         PYTHONUNBUFFERED: '1',
-        VIRTUAL_ENV: '/opt/render/project/src/.venv',
-        PATH: `/opt/render/project/src/.venv/bin:${process.env.PATH}`,
-        PYTHONPATH: '/opt/render/project/src/.venv/lib/python3.11/site-packages'
+        VIRTUAL_ENV: '/opt/venv',
+        PATH: `/opt/venv/bin:${process.env.PATH}`,
+        PYTHONPATH: '/opt/venv/lib/python3.11/site-packages'
       }
     }
 
@@ -353,6 +353,17 @@ app.post('/api/sync-snowflake', async (req, res) => {
       VIRTUAL_ENV: options.env.VIRTUAL_ENV,
       PATH: options.env.PATH
     }, null, 2))
+
+    // Verify Python environment before running script
+    try {
+      const { execSync } = await import('child_process')
+      console.log('\n=== Verifying Python Environment ===')
+      console.log('Python location:', execSync(`which python3`).toString().trim())
+      console.log('Virtual env location:', execSync('ls -la /opt/venv/bin').toString().trim())
+      console.log('Python packages:', execSync(`/opt/venv/bin/pip list`).toString().trim())
+    } catch (error) {
+      console.error('Failed to verify Python environment:', error)
+    }
 
     console.log('\n=== Running Python Script ===')
     
