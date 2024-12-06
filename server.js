@@ -346,64 +346,81 @@ app.post('/api/sync-snowflake', async (req, res) => {
     }
 
     console.log('\n=== Python Script Configuration ===')
-    console.log({
+    console.log(JSON.stringify({
       pythonPath: options.pythonPath,
       scriptPath: options.scriptPath,
       PYTHONPATH: options.env.PYTHONPATH,
       VIRTUAL_ENV: options.env.VIRTUAL_ENV,
       PATH: options.env.PATH
-    })
+    }, null, 2))
 
     console.log('\n=== Running Python Script ===')
-    console.log('Options:', {
-      pythonPath: options.pythonPath,
-      scriptPath: options.scriptPath,
-      timestamp: new Date().toISOString()
-    })
-
-    PythonShell.run('snowflake_sync.py', options)
-      .then(results => {
-        console.log('\n=== Python Script Results ===')
-        console.log('Raw results:', results)
+    
+    // Create PythonShell instance with full options
+    const pyshell = new PythonShell('snowflake_sync.py', options)
+    
+    try {
+      const results = await new Promise((resolve, reject) => {
+        const output = []
         
-        if (!results || results.length === 0) {
-          console.log('❌ No results from script')
-          throw new Error('No results from sync script')
-        }
-        
-        try {
-          const result = JSON.parse(results[results.length - 1])
-          console.log('✅ Parsed results:', result)
-          
-          if (result.status === 'error') {
-            console.log('❌ Script reported error:', result)
-            return res.status(500).json(result)
-          }
-          
-          console.log('✅ Sync completed successfully')
-          res.json(result)
-        } catch (e) {
-          console.error('❌ Error parsing results:', e)
-          console.log('Raw results were:', results)
-          res.status(500).json({
-            error: 'Failed to parse sync results',
-            details: results
-          })
-        }
-      })
-      .catch(err => {
-        console.error('\n=== Python Script Error ===')
-        console.error('Error details:', {
-          message: err.message,
-          stack: err.stack,
-          timestamp: new Date().toISOString()
+        pyshell.on('message', (message) => {
+          console.log('Python output:', message)
+          output.push(message)
         })
+        
+        pyshell.on('error', (err) => {
+          console.error('Python error:', err)
+          reject(err)
+        })
+        
+        pyshell.on('close', () => {
+          resolve(output)
+        })
+        
+        pyshell.send(JSON.stringify({ holdings, prices }))
+        pyshell.end((err) => {
+          if (err) reject(err)
+        })
+      })
+      
+      console.log('\n=== Python Script Results ===')
+      console.log('Raw results:', results)
+      
+      if (!results || results.length === 0) {
+        throw new Error('No results from sync script')
+      }
+      
+      try {
+        const result = JSON.parse(results[results.length - 1])
+        console.log('✅ Parsed results:', result)
+        
+        if (result.status === 'error') {
+          return res.status(500).json(result)
+        }
+        
+        console.log('✅ Sync completed successfully')
+        res.json(result)
+      } catch (e) {
+        console.error('❌ Error parsing results:', e)
+        console.log('Raw results were:', results)
         res.status(500).json({
-          error: 'Sync failed',
-          details: err.message,
-          stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+          error: 'Failed to parse sync results',
+          details: results
         })
+      }
+    } catch (err) {
+      console.error('\n=== Python Script Error ===')
+      console.error('Error details:', {
+        message: err.message,
+        stack: err.stack,
+        timestamp: new Date().toISOString()
       })
+      res.status(500).json({
+        error: 'Sync failed',
+        details: err.message,
+        stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+      })
+    }
   } catch (error) {
     console.error('\n=== Sync Error ===')
     console.error('Error details:', {
