@@ -1,17 +1,36 @@
 import os
 import sys
-print("=== Python Environment Debug ===")
-print(f"Python version: {sys.version}")
-print(f"Python executable: {sys.executable}")
-print(f"Python path: {sys.path}")
-print(f"Current working directory: {os.getcwd()}")
-print(f"Environment variables:")
+
+# Print debug info to stderr so it doesn't interfere with JSON output
+def print_debug(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
+
+print_debug("=== Python Environment Debug ===")
+print_debug(f"Python version: {sys.version}")
+print_debug(f"Python executable: {sys.executable}")
+print_debug(f"Python path: {sys.path}")
+print_debug(f"Current working directory: {os.getcwd()}")
+print_debug(f"Environment variables:")
 for key, value in os.environ.items():
     if key.startswith(('PYTHON', 'VIRTUAL', 'PATH')):
-        print(f"  {key}: {value}")
-print("===========================")
+        print_debug(f"  {key}: {value}")
+print_debug("===========================")
 
-import snowflake.connector
+try:
+    import snowflake.connector
+    print_debug("✅ Successfully imported snowflake.connector")
+except ImportError as e:
+    print_debug(f"❌ Failed to import snowflake.connector: {e}")
+    print_debug("Attempting pip install...")
+    import subprocess
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "snowflake-connector-python==3.6.0"])
+        import snowflake.connector
+        print_debug("✅ Successfully installed and imported snowflake.connector")
+    except Exception as e:
+        print_debug(f"❌ Failed to install snowflake.connector: {e}")
+        raise
+
 import json
 import traceback
 from datetime import datetime

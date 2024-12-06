@@ -332,16 +332,16 @@ app.post('/api/sync-snowflake', async (req, res) => {
 
     const options = {
       mode: 'text',
-      pythonPath: pythonPath,
+      pythonPath: '/opt/render/project/src/.venv/bin/python3',
       pythonOptions: ['-u'],
       scriptPath: path.join(__dirname, 'scripts'),
       args: [JSON.stringify({ holdings, prices })],
       env: {
         ...process.env,
         PYTHONUNBUFFERED: '1',
-        VIRTUAL_ENV: process.env.VIRTUAL_ENV || '/opt/render/project/src/.venv',
-        PATH: `${process.env.VIRTUAL_ENV || '/opt/render/project/src/.venv'}/bin:${process.env.PATH}`,
-        PYTHONPATH: process.env.PYTHONPATH || '/opt/render/project/src/.venv/lib/python3.11/site-packages'
+        VIRTUAL_ENV: '/opt/render/project/src/.venv',
+        PATH: `/opt/render/project/src/.venv/bin:${process.env.PATH}`,
+        PYTHONPATH: '/opt/render/project/src/.venv/lib/python3.11/site-packages'
       }
     }
 
@@ -363,7 +363,13 @@ app.post('/api/sync-snowflake', async (req, res) => {
       const results = await new Promise((resolve, reject) => {
         const output = []
         
+        pyshell.on('stderr', (stderr) => {
+          // Log debug output to console but don't add to results
+          console.log('Python debug:', stderr)
+        })
+        
         pyshell.on('message', (message) => {
+          // Only collect stdout messages (should be JSON)
           console.log('Python output:', message)
           output.push(message)
         })
@@ -384,13 +390,12 @@ app.post('/api/sync-snowflake', async (req, res) => {
       })
       
       console.log('\n=== Python Script Results ===')
-      console.log('Raw results:', results)
-      
       if (!results || results.length === 0) {
         throw new Error('No results from sync script')
       }
       
       try {
+        // Only try to parse the last line as JSON (ignoring debug output)
         const result = JSON.parse(results[results.length - 1])
         console.log('✅ Parsed results:', result)
         
