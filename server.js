@@ -245,64 +245,80 @@ app.get('/api/search', async (req, res) => {
 // Snowflake sync endpoint
 app.post('/api/sync-snowflake', async (req, res) => {
   try {
-    console.log('Received sync request:', {
-      body: req.body,
-      timestamp: new Date().toISOString()
+    const { holdings, prices } = req.body
+    
+    if (!holdings || !prices) {
+      return res.status(400).json({ error: 'Missing required data' })
+    }
+
+    console.log('Sync request received:', {
+      holdings: holdings.length,
+      prices: prices.length
     })
 
-    if (!validateSnowflakeConfig()) {
-      throw new Error('Snowflake is not properly configured')
-    }
-
-    const { holdings, prices } = req.body
-    if (!holdings || !prices || !Array.isArray(holdings) || !Array.isArray(prices)) {
-      throw new Error('Invalid sync payload format')
-    }
-
-    let options = {
-      mode: 'text',
-      pythonPath: process.env.PYTHON_PATH || 'python3',
-      scriptPath: path.join(__dirname, 'scripts'),
-      args: [JSON.stringify(req.body)],
-      env: {
-        ...process.env,
-        PYTHONPATH: process.env.PYTHONPATH || process.env.PYTHON_PATH,
-        PATH: process.env.PATH
+    // Validate holdings data
+    const requiredHoldingFields = ['coin_id', 'symbol', 'name', 'amount']
+    for (const holding of holdings) {
+      const missingFields = requiredHoldingFields.filter(field => !holding[field])
+      if (missingFields.length > 0) {
+        return res.status(400).json({
+          error: 'Invalid holding data',
+          details: `Missing fields: ${missingFields.join(', ')}`
+        })
       }
     }
 
-    console.log('Starting Python sync with options:', {
-      scriptPath: options.scriptPath,
+    // Validate prices data
+    const requiredPriceFields = ['coin_id', 'price_usd']
+    for (const price of prices) {
+      const missingFields = requiredPriceFields.filter(field => !price[field])
+      if (missingFields.length > 0) {
+        return res.status(400).json({
+          error: 'Invalid price data',
+          details: `Missing fields: ${missingFields.join(', ')}`
+        })
+      }
+    }
+
+    const options = {
+      mode: 'text',
+      pythonPath: process.env.PYTHON_PATH,
+      pythonOptions: ['-u'],
+      scriptPath: './scripts',
+      args: [JSON.stringify({ holdings, prices })]
+    }
+
+    console.log('Running sync script with options:', {
       pythonPath: options.pythonPath,
-      timestamp: new Date().toISOString()
+      scriptPath: options.scriptPath
     })
 
-    try {
-      const results = await PythonShell.run('snowflake_sync.py', options)
-      console.log('Python sync completed:', results)
-      res.json({ 
-        message: 'Sync completed successfully', 
-        results,
-        timestamp: new Date().toISOString()
+    PythonShell.run('snowflake_sync.py', options).then(results => {
+      console.log('Sync Results:', results)
+      try {
+        const result = JSON.parse(results[results.length - 1])
+        res.json(result)
+      } catch (e) {
+        console.error('Error parsing sync results:', e, results)
+        res.status(500).json({
+          error: 'Failed to parse sync results',
+          details: results
+        })
+      }
+    }).catch(err => {
+      console.error('Sync Error:', err)
+      res.status(500).json({
+        error: 'Sync failed',
+        details: err.message,
+        stack: err.stack
       })
-    } catch (pythonError) {
-      console.error('Python script error:', {
-        error: pythonError,
-        traceback: pythonError.traceback,
-        timestamp: new Date().toISOString()
-      })
-      throw new Error(`Python sync failed: ${pythonError.message || 'Unknown error'}`)
-    }
-  } catch (error) {
-    console.error('Snowflake sync error:', {
-      error: error.message,
-      stack: error.stack,
-      timestamp: new Date().toISOString()
     })
-    res.status(500).json({ 
+  } catch (error) {
+    console.error('Sync error:', error)
+    res.status(500).json({
       error: 'Failed to sync with Snowflake',
       details: error.message,
-      timestamp: new Date().toISOString()
+      stack: error.stack
     })
   }
 })

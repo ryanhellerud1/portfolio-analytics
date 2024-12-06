@@ -17,15 +17,27 @@ export function SyncProvider({ children }) {
       console.log('Starting Snowflake sync...')
       console.log('Current prices:', prices)
       
+      // Format holdings data
+      const formattedHoldings = holdings.map(h => ({
+        coin_id: h.coinId,
+        symbol: h.symbol,
+        name: h.name,
+        amount: h.amount,
+        category: h.category
+      }))
+
+      // Format prices data
+      const formattedPrices = Object.entries(prices).map(([coinId, data]) => ({
+        coin_id: coinId,
+        price_usd: data.usd,
+        market_cap_usd: data.usd_market_cap,
+        volume_24h_usd: data.usd_24h_vol,
+        price_change_24h_pct: data.usd_24h_change
+      }))
+      
       const syncPayload = {
-        holdings: holdings.map(h => ({
-          ...h,
-          current_price: prices[h.coinId]?.usd || 0,
-          price_change_24h: prices[h.coinId]?.usd_24h_change || 0,
-          market_cap: prices[h.coinId]?.usd_market_cap || 0,
-          volume_24h: prices[h.coinId]?.usd_24h_vol || 0
-        })),
-        prices
+        holdings: formattedHoldings,
+        prices: formattedPrices
       }
       
       console.log('Sync payload:', syncPayload)
