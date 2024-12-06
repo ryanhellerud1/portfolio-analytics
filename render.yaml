@@ -8,57 +8,28 @@ services:
       apt-get update && apt-get install -y python3 python3-pip python3-venv
       
       # Create and activate virtual environment
-      python3 -m venv venv
-      . venv/bin/activate
+      python3 -m venv /opt/venv
+      . /opt/venv/bin/activate
       
-      # Verify Python installation
-      which python3
-      python3 --version
+      # Install Python packages with specific versions
+      pip install --no-cache-dir snowflake-connector-python==3.6.0
+      pip install --no-cache-dir python-dotenv==1.0.0
       
-      # Install Python packages
-      pip install --upgrade pip
-      pip install snowflake-connector-python python-dotenv
-      
-      # Verify Python packages
-      pip list
-      
-      # Create scripts directory and copy Python scripts
-      mkdir -p scripts
-      cp -rv ./scripts/* ./scripts/
-      
-      # Make Python script executable
-      chmod +x ./scripts/snowflake_sync.py
-      
-      # Create a wrapper script to ensure correct Python path
-      echo '#!/bin/bash' > run_python.sh
-      echo 'source ./venv/bin/activate' >> run_python.sh
-      echo 'exec python3 "$@"' >> run_python.sh
-      chmod +x run_python.sh
+      # Verify installations
+      python3 -c "import snowflake.connector; print('Snowflake package installed successfully')"
       
       # Install Node dependencies
       npm install
     startCommand: |
-      echo "=== Deployment Configuration ==="
-      echo "Current directory: $(pwd)"
+      # Activate virtual environment
+      . /opt/venv/bin/activate
       
-      # Activate Python virtual environment
-      . venv/bin/activate
+      # Verify Python environment
+      python3 -c "import sys; print(f'Python path: {sys.path}')"
+      python3 -c "import snowflake.connector; print('Snowflake package loaded successfully')"
       
-      # Verify Python setup
-      echo "Python location: $(which python3)"
-      echo "Python version: $(python3 --version)"
-      echo "Pip packages:"
-      pip list
-      
-      # Verify scripts
-      echo "Contents of scripts directory:"
-      ls -la ./scripts/
-      
-      # Test Python script execution
-      ./run_python.sh -c "import snowflake.connector; print('Snowflake package available')"
-      
-      echo "=== Starting Server ==="
-      PYTHON_PATH="./run_python.sh" node server.js
+      # Start the server
+      node server.js
     envVars:
       - key: NODE_ENV
         value: production
@@ -66,10 +37,8 @@ services:
         value: 3001
       - key: COINGECKO_API_URL
         value: https://api.coingecko.com/api/v3
-      - key: PYTHON_PATH
-        value: ./run_python.sh
       - key: PYTHONPATH
-        value: ./venv/lib/python3.9/site-packages
+        value: /opt/venv/lib/python3/site-packages
       - key: SNOWFLAKE_REGION
         value: us-west-2
       - key: SNOWFLAKE_SCHEMA
