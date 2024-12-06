@@ -284,7 +284,7 @@ app.post('/api/sync-snowflake', async (req, res) => {
     }
     console.log('✅ Snowflake configuration validated')
 
-    // Sync data using Node.js Snowflake SDK
+    // Sync data using Node.js Snowflake driver
     const result = await syncData(holdings, prices)
     
     if (result.status === 'error') {

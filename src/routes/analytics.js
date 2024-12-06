@@ -1,5 +1,6 @@
 import express from 'express'
-import { get_snowflake_connection, validateSnowflakeConfig } from '../utils/snowflake.js'
+import snowflake from 'snowflake-sdk'
+import { validateSnowflakeConfig } from '../utils/snowflake.js'
 
 const router = express.Router()
 
@@ -10,6 +11,84 @@ router.use((req, res, next) => {
   console.log(`[Analytics] Snowflake configured: ${isSnowflakeConfigured ? '✅' : '❌'}`)
   next()
 })
+
+// Helper function to get Snowflake connection
+const getSnowflakeConnection = () => {
+  return new Promise((resolve, reject) => {
+    const connection = snowflake.createConnection({
+      account: process.env.SNOWFLAKE_ACCOUNT,
+      username: process.env.SNOWFLAKE_USERNAME,
+      password: process.env.SNOWFLAKE_PASSWORD,
+      database: process.env.SNOWFLAKE_DATABASE,
+      warehouse: process.env.SNOWFLAKE_WAREHOUSE,
+      schema: process.env.SNOWFLAKE_SCHEMA || 'PUBLIC',
+      role: process.env.SNOWFLAKE_ROLE
+    })
+
+    connection.connect((err, conn) => {
+      if (err) {
+        console.error('Failed to connect to Snowflake:', err)
+        reject(err)
+      } else {
+        console.log('Successfully connected to Snowflake')
+        resolve(conn)
+      }
+    })
+  })
+}
+
+// Helper function to execute Snowflake query
+const executeSnowflakeQuery = async (query) => {
+  const connection = await getSnowflakeConnection()
+  return new Promise((resolve, reject) => {
+    connection.execute({
+      sqlText: query,
+      complete: (err, stmt, rows) => {
+        connection.destroy((destroyErr) => {
+          if (destroyErr) {
+            console.error('Error destroying connection:', destroyErr)
+          }
+        })
+        
+        if (err) {
+          reject(err)
+        } else {
+          resolve(rows)
+        }
+      }
+    })
+  })
+}
+
+// Helper function to handle Snowflake or return mock data
+const getDataWithFallback = async (endpoint, sqlQuery, formatFunction = (data) => data) => {
+  console.log(`[Analytics] Fetching data for ${endpoint}`)
+  
+  try {
+    if (!validateSnowflakeConfig()) {
+      console.log(`[Analytics] ❌ Snowflake not configured, using mock data for ${endpoint}`)
+      return mockData[endpoint]
+    }
+
+    console.log(`[Analytics] 🔍 Executing query for ${endpoint}:`, sqlQuery)
+    const rows = await executeSnowflakeQuery(sqlQuery)
+    console.log(`[Analytics] ✅ Query successful for ${endpoint}, got ${rows?.length || 0} rows`)
+
+    if (!rows || rows.length === 0) {
+      console.log(`[Analytics] ⚠️ No data found for ${endpoint}, using mock data`)
+      return mockData[endpoint]
+    }
+
+    console.log(`[Analytics] 🔄 Transforming data for ${endpoint}`)
+    const transformedData = formatFunction(rows)
+    console.log(`[Analytics] ✅ Data ready for ${endpoint}:`, transformedData)
+    return transformedData
+  } catch (error) {
+    console.error(`[Analytics] ❌ Error fetching data for ${endpoint}:`, error)
+    console.log(`[Analytics] ⚠️ Falling back to mock data for ${endpoint}`)
+    return mockData[endpoint]
+  }
+}
 
 // Mock data for when Snowflake is not available
 const mockData = {
@@ -109,51 +188,6 @@ const mockData = {
   ]
 }
 
-// Helper function to handle Snowflake or return mock data
-const getDataWithFallback = async (endpoint, sqlQuery, formatFunction = (data) => data) => {
-  console.log(`[Analytics] Fetching data for ${endpoint}`)
-  
-  try {
-    if (!validateSnowflakeConfig()) {
-      console.log(`[Analytics] ❌ Snowflake not configured, using mock data for ${endpoint}`)
-      return mockData[endpoint]
-    }
-
-    console.log(`[Analytics] 🔍 Executing query for ${endpoint}:`, sqlQuery)
-    const conn = await get_snowflake_connection()
-    console.log(`[Analytics] ✅ Connected to Snowflake for ${endpoint}`)
-
-    const result = await new Promise((resolve, reject) => {
-      conn.execute({
-        sqlText: sqlQuery,
-        complete: (err, stmt, rows) => {
-          if (err) {
-            console.error(`[Analytics] ❌ Query error for ${endpoint}:`, err)
-            reject(err)
-          } else {
-            console.log(`[Analytics] ✅ Query successful for ${endpoint}, got ${rows?.length || 0} rows`)
-            resolve(rows)
-          }
-        }
-      })
-    })
-
-    if (!result || result.length === 0) {
-      console.log(`[Analytics] ⚠️ No data found for ${endpoint}, using mock data`)
-      return mockData[endpoint]
-    }
-
-    console.log(`[Analytics] 🔄 Transforming data for ${endpoint}`)
-    const transformedData = formatFunction(result)
-    console.log(`[Analytics] ✅ Data ready for ${endpoint}:`, transformedData)
-    return transformedData
-  } catch (error) {
-    console.error(`[Analytics] ❌ Error fetching data for ${endpoint}:`, error)
-    console.log(`[Analytics] ⚠️ Falling back to mock data for ${endpoint}`)
-    return mockData[endpoint]
-  }
-}
-
 // Root analytics endpoint
 router.get('/', (req, res) => {
   res.json({
@@ -177,7 +211,7 @@ const getLatestPricesQuery = () => `
     FROM PRICES
     GROUP BY COIN_ID
   ) latest ON p.COIN_ID = latest.COIN_ID AND p.TIMESTAMP = latest.MAX_TIMESTAMP
-`;
+`
 
 // Performance endpoint
 router.get('/performance', async (req, res) => {
