@@ -300,7 +300,7 @@ app.post('/api/sync-snowflake', async (req, res) => {
 
     // Check if Python path is configured
     console.log('\n=== Checking Python Configuration ===')
-    const pythonPath = '/opt/venv/bin/python3'
+    const pythonPath = 'python3'
     console.log('✅ Python path configured:', pythonPath)
 
     // Check if script exists
@@ -339,9 +339,16 @@ app.post('/api/sync-snowflake', async (req, res) => {
       args: [JSON.stringify({ holdings, prices })],
       env: {
         ...process.env,
-        PYTHONPATH: '/opt/venv/lib/python3/site-packages'
+        PYTHONPATH: process.env.PYTHONPATH || '/opt/venv/lib/python3/site-packages:/usr/local/lib/python3/site-packages'
       }
     }
+
+    // Log Python environment for debugging
+    console.log('Python environment:', {
+      PYTHONPATH: options.env.PYTHONPATH,
+      scriptPath: options.scriptPath,
+      pythonPath: options.pythonPath
+    })
 
     console.log('\n=== Running Python Script ===')
     console.log('Options:', {

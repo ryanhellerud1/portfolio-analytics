@@ -5,25 +5,19 @@ services:
     rootDir: crypto-tracker
     buildCommand: |
       # Install Python and dependencies
-      apt-get update && apt-get install -y python3 python3-pip python3-venv
+      apt-get update && apt-get install -y python3 python3-pip
       
-      # Create and activate virtual environment
-      python3 -m venv /opt/venv
-      . /opt/venv/bin/activate
-      
-      # Install Python packages with specific versions
-      pip install --no-cache-dir snowflake-connector-python==3.6.0
-      pip install --no-cache-dir python-dotenv==1.0.0
+      # Install Python packages globally
+      pip3 install --no-cache-dir snowflake-connector-python==3.6.0
+      pip3 install --no-cache-dir python-dotenv==1.0.0
       
       # Verify installations
       python3 -c "import snowflake.connector; print('Snowflake package installed successfully')"
+      python3 -c "import sys; print(f'Python path: {sys.path}')"
       
       # Install Node dependencies
       npm install
     startCommand: |
-      # Activate virtual environment
-      . /opt/venv/bin/activate
-      
       # Verify Python environment
       python3 -c "import sys; print(f'Python path: {sys.path}')"
       python3 -c "import snowflake.connector; print('Snowflake package loaded successfully')"
@@ -38,7 +32,7 @@ services:
       - key: COINGECKO_API_URL
         value: https://api.coingecko.com/api/v3
       - key: PYTHONPATH
-        value: /opt/venv/lib/python3/site-packages
+        value: /usr/local/lib/python3/site-packages
       - key: SNOWFLAKE_REGION
         value: us-west-2
       - key: SNOWFLAKE_SCHEMA
