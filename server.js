@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url'
 import dotenv from 'dotenv'
 import 'dotenv/config'
 import analyticsRoutes from './src/routes/analytics.js'
-import { validateSnowflakeConfig } from './src/utils/snowflake.js'
+import { validateSnowflakeConfig, syncData } from './src/utils/snowflake.js'
 import fs from 'fs'
 
 // Configure dotenv at the start
@@ -277,20 +277,6 @@ app.post('/api/sync-snowflake', async (req, res) => {
     console.log('\n=== Validating Snowflake Configuration ===')
     if (!validateSnowflakeConfig()) {
       console.log('❌ Snowflake configuration is incomplete')
-      console.log('Environment variables:')
-      const requiredVars = [
-        'SNOWFLAKE_ACCOUNT',
-        'SNOWFLAKE_USERNAME',
-        'SNOWFLAKE_PASSWORD',
-        'SNOWFLAKE_DATABASE',
-        'SNOWFLAKE_WAREHOUSE',
-        'SNOWFLAKE_ROLE',
-        'SNOWFLAKE_REGION'
-      ]
-      requiredVars.forEach(varName => {
-        console.log(`- ${varName}: ${process.env[varName] ? '✓' : '✗'}`)
-      })
-      
       return res.status(500).json({
         error: 'Server configuration error',
         details: 'Snowflake configuration is incomplete'
@@ -298,145 +284,16 @@ app.post('/api/sync-snowflake', async (req, res) => {
     }
     console.log('✅ Snowflake configuration validated')
 
-    // Check if Python path is configured
-    console.log('\n=== Checking Python Configuration ===')
-    const pythonPath = process.env.PYTHON_PATH || '/opt/render/project/src/.venv/bin/python3'
-    console.log('✅ Python path configured:', pythonPath)
-
-    // Verify Python environment
-    try {
-      const { execSync } = await import('child_process')
-      console.log('\n=== Python Environment ===')
-      console.log('Python version:', execSync(`${pythonPath} --version`).toString().trim())
-      console.log('Python location:', execSync(`which ${pythonPath}`).toString().trim())
-      console.log('Python packages:', execSync(`${pythonPath} -m pip list`).toString().trim())
-      console.log('System paths:', execSync(`${pythonPath} -c "import sys; print(sys.path)"`).toString().trim())
-    } catch (error) {
-      console.error('Failed to verify Python environment:', error)
-    }
-
-    // Check if script exists
-    console.log('\n=== Checking Script Path ===')
-    const scriptPath = path.join(__dirname, 'scripts', 'snowflake_sync.py')
-    console.log('Looking for script at:', scriptPath)
+    // Sync data using Node.js Snowflake SDK
+    const result = await syncData(holdings, prices)
     
-    try {
-      await fs.promises.access(scriptPath, fs.constants.F_OK)
-      console.log('✅ Script found')
-      const scriptContents = await fs.promises.readFile(scriptPath, 'utf8')
-      console.log('Script first 100 characters:', scriptContents.substring(0, 100))
-    } catch (error) {
-      console.error('❌ Script not found at:', scriptPath)
-      throw new Error(`Script not found at ${scriptPath}`)
+    if (result.status === 'error') {
+      console.error('❌ Sync failed:', result.message)
+      return res.status(500).json(result)
     }
-
-    const options = {
-      mode: 'text',
-      pythonPath: '/opt/venv/bin/python3',
-      pythonOptions: ['-u'],
-      scriptPath: path.join(__dirname, 'scripts'),
-      args: [JSON.stringify({ holdings, prices })],
-      env: {
-        ...process.env,
-        PYTHONUNBUFFERED: '1',
-        VIRTUAL_ENV: '/opt/venv',
-        PATH: `/opt/venv/bin:${process.env.PATH}`,
-        PYTHONPATH: '/opt/venv/lib/python3.11/site-packages'
-      }
-    }
-
-    console.log('\n=== Python Script Configuration ===')
-    console.log(JSON.stringify({
-      pythonPath: options.pythonPath,
-      scriptPath: options.scriptPath,
-      PYTHONPATH: options.env.PYTHONPATH,
-      VIRTUAL_ENV: options.env.VIRTUAL_ENV,
-      PATH: options.env.PATH
-    }, null, 2))
-
-    // Verify Python environment before running script
-    try {
-      const { execSync } = await import('child_process')
-      console.log('\n=== Verifying Python Environment ===')
-      console.log('Python location:', execSync(`which python3`).toString().trim())
-      console.log('Virtual env location:', execSync('ls -la /opt/venv/bin').toString().trim())
-      console.log('Python packages:', execSync(`/opt/venv/bin/pip list`).toString().trim())
-    } catch (error) {
-      console.error('Failed to verify Python environment:', error)
-    }
-
-    console.log('\n=== Running Python Script ===')
     
-    // Create PythonShell instance with full options
-    const pyshell = new PythonShell('snowflake_sync.py', options)
-    
-    try {
-      const results = await new Promise((resolve, reject) => {
-        const output = []
-        
-        pyshell.on('stderr', (stderr) => {
-          // Log debug output to console but don't add to results
-          console.log('Python debug:', stderr)
-        })
-        
-        pyshell.on('message', (message) => {
-          // Only collect stdout messages (should be JSON)
-          console.log('Python output:', message)
-          output.push(message)
-        })
-        
-        pyshell.on('error', (err) => {
-          console.error('Python error:', err)
-          reject(err)
-        })
-        
-        pyshell.on('close', () => {
-          resolve(output)
-        })
-        
-        pyshell.send(JSON.stringify({ holdings, prices }))
-        pyshell.end((err) => {
-          if (err) reject(err)
-        })
-      })
-      
-      console.log('\n=== Python Script Results ===')
-      if (!results || results.length === 0) {
-        throw new Error('No results from sync script')
-      }
-      
-      try {
-        // Only try to parse the last line as JSON (ignoring debug output)
-        const result = JSON.parse(results[results.length - 1])
-        console.log('✅ Parsed results:', result)
-        
-        if (result.status === 'error') {
-          return res.status(500).json(result)
-        }
-        
-        console.log('✅ Sync completed successfully')
-        res.json(result)
-      } catch (e) {
-        console.error('❌ Error parsing results:', e)
-        console.log('Raw results were:', results)
-        res.status(500).json({
-          error: 'Failed to parse sync results',
-          details: results
-        })
-      }
-    } catch (err) {
-      console.error('\n=== Python Script Error ===')
-      console.error('Error details:', {
-        message: err.message,
-        stack: err.stack,
-        timestamp: new Date().toISOString()
-      })
-      res.status(500).json({
-        error: 'Sync failed',
-        details: err.message,
-        stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
-      })
-    }
+    console.log('✅ Sync completed successfully')
+    res.json(result)
   } catch (error) {
     console.error('\n=== Sync Error ===')
     console.error('Error details:', {
