@@ -300,7 +300,7 @@ app.post('/api/sync-snowflake', async (req, res) => {
 
     // Check if Python path is configured
     console.log('\n=== Checking Python Configuration ===')
-    const pythonPath = process.env.PYTHON_PATH || 'python3'
+    const pythonPath = process.env.PYTHON_PATH || '/opt/render/project/src/.venv/bin/python3'
     console.log('✅ Python path configured:', pythonPath)
 
     // Verify Python environment
@@ -339,8 +339,9 @@ app.post('/api/sync-snowflake', async (req, res) => {
       env: {
         ...process.env,
         PYTHONUNBUFFERED: '1',
-        PATH: process.env.PATH,
-        PYTHONPATH: '/opt/render/project/src/.local/lib/python3.9/site-packages:/usr/local/lib/python3/dist-packages:/usr/lib/python3/dist-packages'
+        VIRTUAL_ENV: process.env.VIRTUAL_ENV || '/opt/render/project/src/.venv',
+        PATH: `${process.env.VIRTUAL_ENV || '/opt/render/project/src/.venv'}/bin:${process.env.PATH}`,
+        PYTHONPATH: process.env.PYTHONPATH || '/opt/render/project/src/.venv/lib/python3.11/site-packages'
       }
     }
 
@@ -349,6 +350,7 @@ app.post('/api/sync-snowflake', async (req, res) => {
       pythonPath: options.pythonPath,
       scriptPath: options.scriptPath,
       PYTHONPATH: options.env.PYTHONPATH,
+      VIRTUAL_ENV: options.env.VIRTUAL_ENV,
       PATH: options.env.PATH
     })
 
