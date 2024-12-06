@@ -303,6 +303,18 @@ app.post('/api/sync-snowflake', async (req, res) => {
     const pythonPath = process.env.PYTHON_PATH || 'python3'
     console.log('✅ Python path configured:', pythonPath)
 
+    // Verify Python environment
+    try {
+      const { execSync } = require('child_process')
+      console.log('\n=== Python Environment ===')
+      console.log('Python version:', execSync(`${pythonPath} --version`).toString().trim())
+      console.log('Python location:', execSync(`which ${pythonPath}`).toString().trim())
+      console.log('Current directory:', execSync('pwd').toString().trim())
+      console.log('Directory contents:', execSync('ls -la').toString().trim())
+    } catch (error) {
+      console.error('Failed to verify Python environment:', error)
+    }
+
     // Check if script exists
     console.log('\n=== Checking Script Path ===')
     const scriptPath = path.join(__dirname, 'scripts', 'snowflake_sync.py')
@@ -311,24 +323,11 @@ app.post('/api/sync-snowflake', async (req, res) => {
     try {
       await fs.promises.access(scriptPath, fs.constants.F_OK)
       console.log('✅ Script found')
-      
-      // Read and log script contents to verify it's correct
       const scriptContents = await fs.promises.readFile(scriptPath, 'utf8')
       console.log('Script first 100 characters:', scriptContents.substring(0, 100))
     } catch (error) {
       console.error('❌ Script not found at:', scriptPath)
-      console.log('Checking directory contents:')
-      try {
-        const scriptsDir = path.join(__dirname, 'scripts')
-        const files = await fs.promises.readdir(scriptsDir)
-        console.log('Files in scripts directory:', files)
-      } catch (dirError) {
-        console.error('❌ Could not read scripts directory:', dirError)
-      }
-      return res.status(500).json({
-        error: 'Server configuration error',
-        details: `Sync script not found at ${scriptPath}`
-      })
+      throw new Error(`Script not found at ${scriptPath}`)
     }
 
     const options = {
@@ -339,32 +338,19 @@ app.post('/api/sync-snowflake', async (req, res) => {
       args: [JSON.stringify({ holdings, prices })],
       env: {
         ...process.env,
-        PYTHONPATH: process.env.PYTHONPATH || '/usr/local/lib/python3/site-packages'
+        PYTHONUNBUFFERED: '1',
+        PATH: process.env.PATH || '/usr/local/bin:/usr/bin:/bin',
+        PYTHONPATH: process.env.PYTHONPATH || '/usr/local/lib/python3/dist-packages:/usr/lib/python3/dist-packages'
       }
     }
 
-    // Log Python environment for debugging
-    console.log('Python environment:', {
-      PYTHONPATH: options.env.PYTHONPATH,
-      scriptPath: options.scriptPath,
+    console.log('\n=== Python Script Configuration ===')
+    console.log({
       pythonPath: options.pythonPath,
-      PATH: process.env.PATH
+      scriptPath: options.scriptPath,
+      PYTHONPATH: options.env.PYTHONPATH,
+      PATH: options.env.PATH
     })
-
-    // Verify Python installation before running script
-    try {
-      const { execSync } = require('child_process')
-      const pythonVersion = execSync(`${pythonPath} --version`).toString()
-      console.log('Python version:', pythonVersion)
-      
-      const pythonPath = execSync(`which ${pythonPath}`).toString()
-      console.log('Python location:', pythonPath)
-      
-      const sitePackages = execSync(`${pythonPath} -c "import site; print(site.getsitepackages())"`).toString()
-      console.log('Python site-packages:', sitePackages)
-    } catch (error) {
-      console.error('Failed to verify Python installation:', error)
-    }
 
     console.log('\n=== Running Python Script ===')
     console.log('Options:', {

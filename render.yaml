@@ -7,32 +7,50 @@ services:
       # Install Python and dependencies
       apt-get update && apt-get install -y python3 python3-pip
       
-      # Install Python packages globally
-      pip3 install --no-cache-dir snowflake-connector-python==3.6.0
-      pip3 install --no-cache-dir python-dotenv==1.0.0
+      # Create scripts directory if it doesn't exist
+      mkdir -p scripts
       
-      # Verify installations
-      python3 -c "import snowflake.connector; print('Snowflake package installed successfully')"
-      python3 -c "import sys; print(f'Python path: {sys.path}')"
+      # Install Python packages globally with specific version of pip
+      python3 -m pip install --upgrade pip==23.3.1
+      python3 -m pip install --no-cache-dir snowflake-connector-python==3.6.0 python-dotenv==1.0.0
+      
+      # Print Python information
+      echo "=== Python Environment ==="
+      python3 --version
+      which python3
+      python3 -m pip list
+      
+      # Verify Python packages
+      python3 -c "import snowflake.connector; print('Snowflake connector version:', snowflake.connector.__version__)"
       
       # Install Node dependencies
       npm install
     startCommand: |
-      # Verify Python environment
-      python3 -c "import sys; print(f'Python path: {sys.path}')"
-      python3 -c "import snowflake.connector; print('Snowflake package loaded successfully')"
-      
-      # Start the server
+      # Print environment information
+      echo "=== Environment Information ==="
+      pwd
+      ls -la
+      echo "=== Python Information ==="
+      which python3
+      python3 --version
+      python3 -m pip list
+      echo "=== Starting Server ==="
       node server.js
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 3001
+      - key: PYTHON_PATH
+        value: python3
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: PYTHONPATH
+        value: /usr/local/lib/python3/dist-packages:/usr/lib/python3/dist-packages
+      - key: PATH
+        value: /usr/local/bin:/usr/bin:/bin
       - key: COINGECKO_API_URL
         value: https://api.coingecko.com/api/v3
-      - key: PYTHONPATH
-        value: /usr/local/lib/python3/site-packages
       - key: SNOWFLAKE_REGION
         value: us-west-2
       - key: SNOWFLAKE_SCHEMA
