@@ -11,11 +11,11 @@ import { validateSnowflakeConfig } from './src/utils/snowflake.js'
 import fs from 'fs'
 
 // Configure dotenv at the start
-dotenv.config()
-
-// Set up file paths
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
+dotenv.config({ path: path.join(__dirname, '.env') })
+
+// Set up file paths
 const { PythonShell } = pkg
 
 const app = express()
@@ -256,58 +256,80 @@ app.get('/api/search', async (req, res) => {
 // Snowflake sync endpoint
 app.post('/api/sync-snowflake', async (req, res) => {
   try {
+    console.log('\n=== Starting Snowflake Sync ===')
     const { holdings, prices } = req.body
     
     if (!holdings || !prices) {
-      return res.status(400).json({ error: 'Missing required data' })
+      console.log('❌ Missing required data')
+      return res.status(400).json({ 
+        error: 'Missing required data',
+        details: 'Both holdings and prices are required'
+      })
     }
 
-    console.log('Sync request received:', {
+    console.log('📊 Sync request received:', {
       holdings: holdings.length,
       prices: prices.length,
       timestamp: new Date().toISOString()
     })
 
-    // Validate holdings data
-    const requiredHoldingFields = ['coin_id', 'symbol', 'name', 'amount']
-    for (const holding of holdings) {
-      const missingFields = requiredHoldingFields.filter(field => !holding[field])
-      if (missingFields.length > 0) {
-        return res.status(400).json({
-          error: 'Invalid holding data',
-          details: `Missing fields: ${missingFields.join(', ')}`
-        })
-      }
+    // Validate Snowflake configuration
+    console.log('\n=== Validating Snowflake Configuration ===')
+    if (!validateSnowflakeConfig()) {
+      console.log('❌ Snowflake configuration is incomplete')
+      console.log('Environment variables:')
+      const requiredVars = [
+        'SNOWFLAKE_ACCOUNT',
+        'SNOWFLAKE_USERNAME',
+        'SNOWFLAKE_PASSWORD',
+        'SNOWFLAKE_DATABASE',
+        'SNOWFLAKE_WAREHOUSE',
+        'SNOWFLAKE_ROLE',
+        'SNOWFLAKE_REGION'
+      ]
+      requiredVars.forEach(varName => {
+        console.log(`- ${varName}: ${process.env[varName] ? '✓' : '✗'}`)
+      })
+      
+      return res.status(500).json({
+        error: 'Server configuration error',
+        details: 'Snowflake configuration is incomplete'
+      })
     }
-
-    // Validate prices data
-    const requiredPriceFields = ['coin_id', 'price_usd']
-    for (const price of prices) {
-      const missingFields = requiredPriceFields.filter(field => !price[field])
-      if (missingFields.length > 0) {
-        return res.status(400).json({
-          error: 'Invalid price data',
-          details: `Missing fields: ${missingFields.join(', ')}`
-        })
-      }
-    }
+    console.log('✅ Snowflake configuration validated')
 
     // Check if Python path is configured
+    console.log('\n=== Checking Python Configuration ===')
     if (!process.env.PYTHON_PATH) {
-      console.error('Python path not configured')
+      console.error('❌ Python path not configured')
       return res.status(500).json({
         error: 'Server configuration error',
         details: 'Python path not configured'
       })
     }
+    console.log('✅ Python path configured:', process.env.PYTHON_PATH)
 
     // Check if script exists
+    console.log('\n=== Checking Script Path ===')
     const scriptPath = path.join(__dirname, 'scripts', 'snowflake_sync.py')
-    if (!fs.existsSync(scriptPath)) {
-      console.error('Sync script not found:', scriptPath)
+    console.log('Looking for script at:', scriptPath)
+    
+    try {
+      await fs.promises.access(scriptPath, fs.constants.F_OK)
+      console.log('✅ Script found')
+    } catch (error) {
+      console.error('❌ Script not found at:', scriptPath)
+      console.log('Checking directory contents:')
+      try {
+        const scriptsDir = path.join(__dirname, 'scripts')
+        const files = await fs.promises.readdir(scriptsDir)
+        console.log('Files in scripts directory:', files)
+      } catch (dirError) {
+        console.error('❌ Could not read scripts directory:', dirError)
+      }
       return res.status(500).json({
         error: 'Server configuration error',
-        details: 'Sync script not found'
+        details: `Sync script not found at ${scriptPath}`
       })
     }
 
@@ -319,7 +341,8 @@ app.post('/api/sync-snowflake', async (req, res) => {
       args: [JSON.stringify({ holdings, prices })]
     }
 
-    console.log('Running sync script with options:', {
+    console.log('\n=== Running Python Script ===')
+    console.log('Options:', {
       pythonPath: options.pythonPath,
       scriptPath: options.scriptPath,
       timestamp: new Date().toISOString()
@@ -327,18 +350,28 @@ app.post('/api/sync-snowflake', async (req, res) => {
 
     PythonShell.run('snowflake_sync.py', options)
       .then(results => {
-        console.log('Raw sync results:', results)
+        console.log('\n=== Python Script Results ===')
+        console.log('Raw results:', results)
         
         if (!results || results.length === 0) {
+          console.log('❌ No results from script')
           throw new Error('No results from sync script')
         }
         
         try {
           const result = JSON.parse(results[results.length - 1])
-          console.log('Parsed sync results:', result)
+          console.log('✅ Parsed results:', result)
+          
+          if (result.status === 'error') {
+            console.log('❌ Script reported error:', result)
+            return res.status(500).json(result)
+          }
+          
+          console.log('✅ Sync completed successfully')
           res.json(result)
         } catch (e) {
-          console.error('Error parsing sync results:', e, results)
+          console.error('❌ Error parsing results:', e)
+          console.log('Raw results were:', results)
           res.status(500).json({
             error: 'Failed to parse sync results',
             details: results
@@ -346,27 +379,29 @@ app.post('/api/sync-snowflake', async (req, res) => {
         }
       })
       .catch(err => {
-        console.error('Sync script error:', {
-          error: err.message,
+        console.error('\n=== Python Script Error ===')
+        console.error('Error details:', {
+          message: err.message,
           stack: err.stack,
           timestamp: new Date().toISOString()
         })
         res.status(500).json({
           error: 'Sync failed',
           details: err.message,
-          stack: err.stack
+          stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
         })
       })
   } catch (error) {
-    console.error('Sync error:', {
-      error: error.message,
+    console.error('\n=== Sync Error ===')
+    console.error('Error details:', {
+      message: error.message,
       stack: error.stack,
       timestamp: new Date().toISOString()
     })
     res.status(500).json({
       error: 'Failed to sync with Snowflake',
       details: error.message,
-      stack: error.stack
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     })
   }
 })
