@@ -305,12 +305,12 @@ app.post('/api/sync-snowflake', async (req, res) => {
 
     // Verify Python environment
     try {
-      const { execSync } = require('child_process')
+      const { execSync } = await import('child_process')
       console.log('\n=== Python Environment ===')
       console.log('Python version:', execSync(`${pythonPath} --version`).toString().trim())
       console.log('Python location:', execSync(`which ${pythonPath}`).toString().trim())
-      console.log('Current directory:', execSync('pwd').toString().trim())
-      console.log('Directory contents:', execSync('ls -la').toString().trim())
+      console.log('Python packages:', execSync(`${pythonPath} -m pip list`).toString().trim())
+      console.log('System paths:', execSync(`${pythonPath} -c "import sys; print(sys.path)"`).toString().trim())
     } catch (error) {
       console.error('Failed to verify Python environment:', error)
     }
@@ -339,8 +339,8 @@ app.post('/api/sync-snowflake', async (req, res) => {
       env: {
         ...process.env,
         PYTHONUNBUFFERED: '1',
-        PATH: process.env.PATH || '/usr/local/bin:/usr/bin:/bin',
-        PYTHONPATH: process.env.PYTHONPATH || '/usr/local/lib/python3/dist-packages:/usr/lib/python3/dist-packages'
+        PATH: process.env.PATH,
+        PYTHONPATH: '/opt/render/project/src/.local/lib/python3.9/site-packages:/usr/local/lib/python3/dist-packages:/usr/lib/python3/dist-packages'
       }
     }
 
