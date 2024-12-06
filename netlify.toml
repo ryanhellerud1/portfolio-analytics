@@ -5,6 +5,27 @@
 [context.production.environment]
   VITE_API_URL = "https://crypto-tracker-api-djbp.onrender.com"
 
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Content-Security-Policy = """
+      default-src 'self' https://crypto-tracker-api-djbp.onrender.com https://api.coingecko.com;
+      script-src 'self' 'unsafe-inline' 'unsafe-eval';
+      style-src 'self' 'unsafe-inline';
+      img-src 'self' data: https:;
+      connect-src 'self' https://crypto-tracker-api-djbp.onrender.com https://api.coingecko.com;
+      font-src 'self';
+      object-src 'none';
+      media-src 'self';
+      form-action 'self';
+      frame-ancestors 'none';
+    """
+    Permissions-Policy = "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
