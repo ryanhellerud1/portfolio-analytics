@@ -33,11 +33,8 @@ def get_snowflake_connection():
         account = os.getenv('SNOWFLAKE_ACCOUNT')
         region = os.getenv('SNOWFLAKE_REGION')
         
-        # Format account identifier based on whether it already includes the region
-        if '.' in account:
-            account_identifier = account
-        else:
-            account_identifier = f"{account}.{region}"
+        # Format account identifier correctly for Snowflake
+        account_identifier = f"{account}.{region}.snowflakecomputing.com"
         
         print(f"Connecting to Snowflake account: {account_identifier}")
         print(f"Using warehouse: {os.getenv('SNOWFLAKE_WAREHOUSE')}")
@@ -47,7 +44,8 @@ def get_snowflake_connection():
         conn = snowflake.connector.connect(
             user=os.getenv('SNOWFLAKE_USERNAME'),
             password=os.getenv('SNOWFLAKE_PASSWORD'),
-            account=account_identifier,
+            account=account,  # Use just the account name, not the full URL
+            region=region,    # Specify region separately
             warehouse=os.getenv('SNOWFLAKE_WAREHOUSE'),
             database=os.getenv('SNOWFLAKE_DATABASE'),
             schema=os.getenv('SNOWFLAKE_SCHEMA', 'PUBLIC'),
