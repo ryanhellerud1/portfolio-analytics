@@ -10,11 +10,11 @@ function App() {
   return (
     <ChakraProvider>
       <QueryClientProvider client={queryClient}>
-        <SyncProvider>
-          <CryptoProvider>
+        <CryptoProvider>
+          <SyncProvider>
             <Dashboard />
-          </CryptoProvider>
-        </SyncProvider>
+          </SyncProvider>
+        </CryptoProvider>
       </QueryClientProvider>
     </ChakraProvider>
   )
