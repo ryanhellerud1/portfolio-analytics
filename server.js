@@ -8,6 +8,7 @@ import dotenv from 'dotenv'
 import 'dotenv/config'
 import analyticsRoutes from './src/routes/analytics.js'
 import { validateSnowflakeConfig } from './src/utils/snowflake.js'
+import fs from 'fs'
 
 // Configure dotenv at the start
 dotenv.config()
@@ -263,7 +264,8 @@ app.post('/api/sync-snowflake', async (req, res) => {
 
     console.log('Sync request received:', {
       holdings: holdings.length,
-      prices: prices.length
+      prices: prices.length,
+      timestamp: new Date().toISOString()
     })
 
     // Validate holdings data
@@ -290,41 +292,77 @@ app.post('/api/sync-snowflake', async (req, res) => {
       }
     }
 
+    // Check if Python path is configured
+    if (!process.env.PYTHON_PATH) {
+      console.error('Python path not configured')
+      return res.status(500).json({
+        error: 'Server configuration error',
+        details: 'Python path not configured'
+      })
+    }
+
+    // Check if script exists
+    const scriptPath = path.join(__dirname, 'scripts', 'snowflake_sync.py')
+    if (!fs.existsSync(scriptPath)) {
+      console.error('Sync script not found:', scriptPath)
+      return res.status(500).json({
+        error: 'Server configuration error',
+        details: 'Sync script not found'
+      })
+    }
+
     const options = {
       mode: 'text',
       pythonPath: process.env.PYTHON_PATH,
       pythonOptions: ['-u'],
-      scriptPath: './scripts',
+      scriptPath: path.join(__dirname, 'scripts'),
       args: [JSON.stringify({ holdings, prices })]
     }
 
     console.log('Running sync script with options:', {
       pythonPath: options.pythonPath,
-      scriptPath: options.scriptPath
+      scriptPath: options.scriptPath,
+      timestamp: new Date().toISOString()
     })
 
-    PythonShell.run('snowflake_sync.py', options).then(results => {
-      console.log('Sync Results:', results)
-      try {
-        const result = JSON.parse(results[results.length - 1])
-        res.json(result)
-      } catch (e) {
-        console.error('Error parsing sync results:', e, results)
-        res.status(500).json({
-          error: 'Failed to parse sync results',
-          details: results
-        })
-      }
-    }).catch(err => {
-      console.error('Sync Error:', err)
-      res.status(500).json({
-        error: 'Sync failed',
-        details: err.message,
-        stack: err.stack
+    PythonShell.run('snowflake_sync.py', options)
+      .then(results => {
+        console.log('Raw sync results:', results)
+        
+        if (!results || results.length === 0) {
+          throw new Error('No results from sync script')
+        }
+        
+        try {
+          const result = JSON.parse(results[results.length - 1])
+          console.log('Parsed sync results:', result)
+          res.json(result)
+        } catch (e) {
+          console.error('Error parsing sync results:', e, results)
+          res.status(500).json({
+            error: 'Failed to parse sync results',
+            details: results
+          })
+        }
       })
-    })
+      .catch(err => {
+        console.error('Sync script error:', {
+          error: err.message,
+          stack: err.stack,
+          timestamp: new Date().toISOString()
+        })
+        res.status(500).json({
+          error: 'Sync failed',
+          details: err.message,
+          stack: err.stack
+        })
+      })
   } catch (error) {
-    console.error('Sync error:', error)
+    console.error('Sync error:', {
+      error: error.message,
+      stack: error.stack,
+      timestamp: new Date().toISOString()
+    })
     res.status(500).json({
       error: 'Failed to sync with Snowflake',
       details: error.message,
