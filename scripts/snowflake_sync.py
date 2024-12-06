@@ -32,9 +32,17 @@ def get_snowflake_connection():
     try:
         account = os.getenv('SNOWFLAKE_ACCOUNT')
         region = os.getenv('SNOWFLAKE_REGION')
-        account_identifier = f"{account}.{region}"
+        
+        # Format account identifier based on whether it already includes the region
+        if '.' in account:
+            account_identifier = account
+        else:
+            account_identifier = f"{account}.{region}"
         
         print(f"Connecting to Snowflake account: {account_identifier}")
+        print(f"Using warehouse: {os.getenv('SNOWFLAKE_WAREHOUSE')}")
+        print(f"Using database: {os.getenv('SNOWFLAKE_DATABASE')}")
+        print(f"Using role: {os.getenv('SNOWFLAKE_ROLE')}")
         
         conn = snowflake.connector.connect(
             user=os.getenv('SNOWFLAKE_USERNAME'),
@@ -51,6 +59,13 @@ def get_snowflake_connection():
     except Exception as e:
         error_msg = f"Error connecting to Snowflake: {str(e)}"
         print(f"❌ {error_msg}")
+        print(f"Connection details (sanitized):")
+        print(f"- Account: {account}")
+        print(f"- Region: {region}")
+        print(f"- Username: {os.getenv('SNOWFLAKE_USERNAME')}")
+        print(f"- Database: {os.getenv('SNOWFLAKE_DATABASE')}")
+        print(f"- Warehouse: {os.getenv('SNOWFLAKE_WAREHOUSE')}")
+        print(f"- Role: {os.getenv('SNOWFLAKE_ROLE')}")
         raise
 
 def sync_data(data):
