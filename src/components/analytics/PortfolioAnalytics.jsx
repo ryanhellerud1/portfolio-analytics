@@ -24,6 +24,7 @@ import {
 } from '@chakra-ui/react'
 import { useEffect, useState } from 'react'
 import { useSync } from '../../context/SyncContext'
+import { analyticsApi } from '../../services/analyticsApi'
 import TechnicalIndicators from './TechnicalIndicators'
 import VolatilityAnalysis from './VolatilityAnalysis'
 import PriceMomentum from './PriceMomentum'
@@ -45,18 +46,20 @@ function PortfolioAnalytics() {
       setIsLoading(true)
       setError(null)
 
-      // Fetch portfolio performance
-      const perfResponse = await fetch('/api/analytics/performance')
-      const perfData = await perfResponse.json()
-      
+      // Fetch portfolio performance using analyticsApi
+      const perfData = await analyticsApi.getPerformance()
       console.log('Raw performance data:', perfData)
       
       if (perfData.error) {
         throw new Error(perfData.error)
       }
       
+      if (!perfData.data) {
+        throw new Error('No performance data received')
+      }
+      
       // Ensure data is an array and values are numbers
-      const formattedPerformance = (perfData.data || []).map(item => ({
+      const formattedPerformance = perfData.data.map(item => ({
         category: item.category || 'Other',
         total_value: Number(item.total_value) || 0,
         percentage: Number(item.percentage) || 0,
@@ -67,15 +70,18 @@ function PortfolioAnalytics() {
       console.log('Formatted performance data:', formattedPerformance)
       setPerformance(formattedPerformance)
 
-      // Fetch price alerts
-      const alertsResponse = await fetch('/api/analytics/alerts')
-      const alertsData = await alertsResponse.json()
+      // Fetch price alerts using analyticsApi
+      const alertsData = await analyticsApi.getAlerts()
       
       if (alertsData.error) {
         throw new Error(alertsData.error)
       }
+
+      if (!alertsData.data) {
+        throw new Error('No alerts data received')
+      }
       
-      setAlerts(alertsData.data || [])
+      setAlerts(alertsData.data)
     } catch (error) {
       console.error('Error fetching analytics:', error)
       setError(error.message || 'Failed to fetch analytics')
@@ -192,7 +198,7 @@ function PortfolioAnalytics() {
             Market Analysis Dashboard
           </Text>
           <Text color="gray.600" _dark={{ color: 'gray.300' }}>
-            Monitor your portfolio with advanced analytics including technical indicators, risk metrics, and price momentum signals. Add coins to your watch list to track their performance.
+            Monitor your portfolio with advanced analytics including technical indicators, risk metrics, and price momentum signals.
           </Text>
         </Box>
 
@@ -218,7 +224,7 @@ function PortfolioAnalytics() {
       </Box>
 
       {/* Price Alerts */}
-      <Box p={4} bg={bgColor} borderRadius="lg" shadow="sm">
+      <Box p={4} bg={bgColor} borderRadius="lg" shadow="sm" w="full">
         <Text fontSize="lg" fontWeight="bold" mb={4}>
           Price Alerts
         </Text>

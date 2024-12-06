@@ -37,7 +37,7 @@ export default function PriceMomentum() {
       setIsLoading(true)
       setError(null)
       const data = await analyticsApi.getPriceMomentum()
-      if (!data.data) throw new Error('No data received')
+      if (!data.data) throw new Error('No momentum data received')
       setMomentum(data.data)
     } catch (error) {
       console.error('Error fetching momentum data:', error)
@@ -102,6 +102,7 @@ export default function PriceMomentum() {
   if (isLoading) return (
     <Box p={4} textAlign="center">
       <Spinner size="xl" />
+      <Text mt={4}>Loading momentum analysis...</Text>
     </Box>
   )
 
@@ -109,6 +110,13 @@ export default function PriceMomentum() {
     <Alert status="error">
       <AlertIcon />
       {error}
+    </Alert>
+  )
+
+  if (!processedMomentumData.all.length) return (
+    <Alert status="info">
+      <AlertIcon />
+      No momentum data available
     </Alert>
   )
 

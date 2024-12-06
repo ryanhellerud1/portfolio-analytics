@@ -22,6 +22,7 @@ import {
   AlertIcon
 } from '@chakra-ui/react'
 import { useEffect, useState, useMemo } from 'react'
+import { analyticsApi } from '../../services/analyticsApi'
 
 export default function VolatilityAnalysis() {
   const [volatilityData, setVolatilityData] = useState([])
@@ -37,8 +38,7 @@ export default function VolatilityAnalysis() {
     try {
       setIsLoading(true)
       setError(null)
-      const response = await fetch('/api/analytics/risk')
-      const data = await response.json()
+      const data = await analyticsApi.getRiskAnalysis()
       if (!data.data) throw new Error('No data received')
       setVolatilityData(data.data)
     } catch (error) {
@@ -128,6 +128,7 @@ export default function VolatilityAnalysis() {
   if (isLoading) return (
     <Box p={4} textAlign="center">
       <Spinner size="xl" />
+      <Text mt={4}>Loading volatility analysis...</Text>
     </Box>
   )
 

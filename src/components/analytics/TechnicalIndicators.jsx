@@ -46,8 +46,7 @@ export default function TechnicalIndicators() {
     try {
       setIsLoading(true)
       setError(null)
-      const response = await fetch('/api/analytics/technical')
-      const data = await response.json()
+      const data = await analyticsApi.getTechnicalIndicators()
       if (!data.data) throw new Error('No technical data received')
       setTechnicalData(data.data)
     } catch (error) {
@@ -140,6 +139,7 @@ export default function TechnicalIndicators() {
   if (isLoading) return (
     <Box p={4} textAlign="center">
       <Spinner size="xl" />
+      <Text mt={4}>Loading technical indicators...</Text>
     </Box>
   )
 
