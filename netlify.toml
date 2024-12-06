@@ -2,10 +2,8 @@
   command = "npm run build"
   publish = "dist"
 
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/:splat"
-  status = 200
+[context.production.environment]
+  VITE_API_URL = "https://crypto-tracker-api-djbp.onrender.com"
 
 [[redirects]]
   from = "/*"

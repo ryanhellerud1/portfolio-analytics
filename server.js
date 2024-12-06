@@ -19,14 +19,16 @@ const { PythonShell } = pkg
 
 const app = express()
 
-// Basic middleware
+// CORS configuration
+const corsOptions = {
+  origin: ['https://portfolio-metrics.netlify.app', 'http://localhost:5173'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  optionsSuccessStatus: 200
+}
+
+app.use(cors(corsOptions))
 app.use(express.json())
-app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? 'https://portfolio-metrics.netlify.app'
-    : 'http://localhost:5173',
-  credentials: true
-}))
 
 // Add request logging with more details
 app.use((req, res, next) => {
