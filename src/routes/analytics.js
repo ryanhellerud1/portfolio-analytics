@@ -6,15 +6,29 @@ const router = express.Router()
 
 // Debug logging middleware for analytics routes
 router.use((req, res, next) => {
-  console.log(`[Analytics] Processing ${req.method} ${req.originalUrl}`)
-  const isSnowflakeConfigured = validateSnowflakeConfig()
-  console.log(`[Analytics] Snowflake configured: ${isSnowflakeConfigured ? '✅' : '❌'}`)
+  console.log(`[Analytics] ====== Request Start ======`)
+  console.log(`[Analytics] ${req.method} ${req.originalUrl}`)
+  console.log(`[Analytics] Headers:`, req.headers)
+  console.log(`[Analytics] Query:`, req.query)
+  console.log(`[Analytics] Body:`, req.body)
+  
+  // Capture the original res.json to add logging
+  const originalJson = res.json
+  res.json = function(data) {
+    console.log(`[Analytics] Response data:`, data)
+    return originalJson.apply(this, arguments)
+  }
+  
   next()
 })
 
 // Error handling middleware specific to analytics routes
 router.use((err, req, res, next) => {
-  console.error('[Analytics] Error:', err)
+  console.error(`[Analytics] ====== Error Handler ======`)
+  console.error(`[Analytics] Error:`, err)
+  console.error(`[Analytics] Stack:`, err.stack)
+  
+  // Ensure proper JSON response
   res.status(500).json({
     error: 'Analytics error',
     message: err.message,
@@ -24,7 +38,17 @@ router.use((err, req, res, next) => {
 
 // Helper function to get Snowflake connection
 const getSnowflakeConnection = () => {
+  console.log(`[Analytics] ====== Getting Snowflake Connection ======`)
   return new Promise((resolve, reject) => {
+    console.log(`[Analytics] Creating connection with config:`, {
+      account: process.env.SNOWFLAKE_ACCOUNT,
+      username: process.env.SNOWFLAKE_USERNAME,
+      database: process.env.SNOWFLAKE_DATABASE,
+      warehouse: process.env.SNOWFLAKE_WAREHOUSE,
+      schema: process.env.SNOWFLAKE_SCHEMA || 'PUBLIC',
+      role: process.env.SNOWFLAKE_ROLE
+    })
+    
     const connection = snowflake.createConnection({
       account: process.env.SNOWFLAKE_ACCOUNT,
       username: process.env.SNOWFLAKE_USERNAME,
@@ -37,10 +61,10 @@ const getSnowflakeConnection = () => {
 
     connection.connect((err, conn) => {
       if (err) {
-        console.error('[Analytics] Failed to connect to Snowflake:', err)
+        console.error(`[Analytics] Snowflake connection error:`, err)
         reject(err)
       } else {
-        console.log('[Analytics] Successfully connected to Snowflake')
+        console.log(`[Analytics] Snowflake connection successful`)
         resolve(conn)
       }
     })
@@ -49,6 +73,9 @@ const getSnowflakeConnection = () => {
 
 // Helper function to execute Snowflake query
 const executeSnowflakeQuery = async (query) => {
+  console.log(`[Analytics] ====== Executing Query ======`)
+  console.log(`[Analytics] Query:`, query)
+  
   let connection
   try {
     connection = await getSnowflakeConnection()
@@ -57,20 +84,22 @@ const executeSnowflakeQuery = async (query) => {
         sqlText: query,
         complete: (err, stmt, rows) => {
           if (err) {
+            console.error(`[Analytics] Query execution error:`, err)
             reject(err)
           } else {
+            console.log(`[Analytics] Query executed successfully, rows:`, rows?.length)
             resolve(rows || [])
           }
         }
       })
     })
   } catch (error) {
-    console.error('[Analytics] Query execution error:', error)
+    console.error(`[Analytics] Query execution error:`, error)
     throw error
   } finally {
     if (connection) {
       connection.destroy((err) => {
-        if (err) console.error('[Analytics] Error destroying connection:', err)
+        if (err) console.error(`[Analytics] Error destroying connection:`, err)
       })
     }
   }
@@ -231,7 +260,9 @@ const getLatestPricesQuery = () => `
 
 // Performance endpoint
 router.get('/performance', async (req, res) => {
+  console.log(`[Analytics] ====== Performance Endpoint ======`)
   try {
+    console.log(`[Analytics] Fetching performance data...`)
     const data = await getDataWithFallback(
       'performance',
       `
@@ -251,10 +282,15 @@ router.get('/performance', async (req, res) => {
         avg_24h_change: Number(row.AVG_24H_CHANGE) || 0
       }))
     )
+    console.log(`[Analytics] Performance data fetched successfully:`, data)
     res.json({ data })
   } catch (error) {
-    console.error('[Analytics] Error in performance endpoint:', error)
-    res.status(500).json({ error: 'Failed to fetch analytics', message: error.message })
+    console.error(`[Analytics] Performance endpoint error:`, error)
+    res.status(500).json({ 
+      error: 'Failed to fetch analytics', 
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    })
   }
 })
 

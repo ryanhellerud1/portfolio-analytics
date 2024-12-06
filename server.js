@@ -30,6 +30,32 @@ const corsOptions = {
   credentials: false
 }
 
+// Add request logging
+app.use((req, res, next) => {
+  console.log(`\n====== Request Start ======`)
+  console.log(`${req.method} ${req.url}`)
+  console.log('Headers:', req.headers)
+  console.log('Query:', req.query)
+  console.log('Body:', req.body)
+  
+  const start = Date.now()
+  
+  // Capture the original res.json to add logging
+  const originalJson = res.json
+  res.json = function(data) {
+    console.log(`Response data:`, data)
+    return originalJson.apply(this, arguments)
+  }
+  
+  res.on('finish', () => {
+    const duration = Date.now() - start
+    console.log(`\n====== Request Complete ======`)
+    console.log(`${req.method} ${req.url} - ${res.statusCode} (${duration}ms)`)
+  })
+  
+  next()
+})
+
 // Apply CORS middleware
 app.use(cors(corsOptions))
 
@@ -46,16 +72,6 @@ app.use((req, res, next) => {
 
 // Parse JSON bodies
 app.use(express.json())
-
-// Add request logging
-app.use((req, res, next) => {
-  const start = Date.now()
-  res.on('finish', () => {
-    const duration = Date.now() - start
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} - ${res.statusCode} (${duration}ms)`)
-  })
-  next()
-})
 
 // Mount analytics routes
 app.use('/api/analytics', analyticsRoutes)
@@ -312,28 +328,35 @@ app.post('/api/sync-snowflake', async (req, res) => {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error('Error details:', {
-    message: err.message,
-    stack: err.stack,
-    path: req.path,
+  console.error(`\n====== Error Handler ======`)
+  console.error('Error:', err)
+  console.error('Stack:', err.stack)
+  console.error('Request details:', {
     method: req.method,
-    timestamp: new Date().toISOString()
+    url: req.url,
+    headers: req.headers,
+    query: req.query,
+    body: req.body
   })
   
   // Ensure we send a JSON response
   res.status(err.status || 500).json({
     error: process.env.NODE_ENV === 'production' ? 'Internal Server Error' : err.message,
     status: err.status || 500,
-    path: req.path
+    path: req.path,
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
   })
 })
 
 // 404 handler - ensure JSON response
 app.use((req, res) => {
-  console.log('404 Not Found:', {
-    path: req.path,
+  console.log(`\n====== 404 Not Found ======`)
+  console.log('Request details:', {
     method: req.method,
-    timestamp: new Date().toISOString()
+    url: req.url,
+    headers: req.headers,
+    query: req.query,
+    body: req.body
   })
   
   res.status(404).json({
