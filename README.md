@@ -1,5 +1,6 @@
 # portfolio-analytics
 # Crypto Portfolio Tracker
+Deployed: https://main--portfolio-metrics.netlify.app/
 
 A full-stack application for tracking cryptocurrency portfolios with real-time price updates and analytics.
 
